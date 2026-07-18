@@ -27,6 +27,11 @@ describe('OMYS mobile flow', () => {
     expect(screen.getByRole('link', { name: /친구들과 시작하기/ })).toHaveClass('button--primary')
     expect(screen.getByRole('link', { name: /OMYS가 골라주기/ })).toHaveClass('button--primary')
     expect(screen.getByRole('link', { name: '활동 뽑기' })).toHaveAttribute('href', '/activities')
+    expect(screen.getByText('사용법')).toBeInTheDocument()
+    expect(screen.getByText('장소 숨기기를 설정해요.')).toBeInTheDocument()
+    expect(screen.queryByText('친구들의 비밀 후보')).not.toBeInTheDocument()
+    expect(screen.queryByText('새로고침해도 잠금')).not.toBeInTheDocument()
+    expect(screen.queryByText('도착 순간 공개')).not.toBeInTheDocument()
   })
 
   it('renders the invite nickname flow without sign-up', () => {

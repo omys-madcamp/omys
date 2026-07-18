@@ -1,4 +1,4 @@
-import { LockKeyhole, Map, PartyPopper, Sparkles, Users, Zap } from 'lucide-react'
+import { BookOpen, ChevronDown, LockKeyhole, Map, Sparkles, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Logo, Shell } from '../components/UI'
 import { track } from '../lib/api'
@@ -80,29 +80,55 @@ export default function Landing() {
           활동 뽑기
         </Link>
       </section>
-      <section className="features">
-        <article>
-          <span>
-            <Users />
+      <details className="usage-guide">
+        <summary>
+          <span className="usage-guide__icon">
+            <BookOpen size={20} />
           </span>
-          <h3>친구들의 비밀 후보</h3>
-          <p>누가 무엇을 냈는지는 추첨 전까지 아무도 몰라요.</p>
-        </article>
-        <article>
           <span>
-            <LockKeyhole />
+            <strong>사용법</strong>
+            <small>OMYS를 즐기는 방법을 확인해 보세요</small>
           </span>
-          <h3>새로고침해도 잠금</h3>
-          <p>선정 결과는 서버에 단단히 봉인해 그대로 유지해요.</p>
-        </article>
-        <article>
-          <span>
-            <PartyPopper />
-          </span>
-          <h3>도착 순간 공개</h3>
-          <p>100m 안에 들어오면 오늘의 스팟을 함께 열어요.</p>
-        </article>
-      </section>
+          <ChevronDown className="usage-guide__chevron" size={20} />
+        </summary>
+        <div className="usage-guide__content">
+          <p>
+            <strong>OMYS(오늘의 미스터리 스팟)</strong>는 친구나 연인과의 외출 장소를 랜덤으로 정해
+            주는 서비스입니다.
+          </p>
+
+          <section>
+            <h3>친구들과 시작하기</h3>
+            <ol>
+              <li>출발 위치를 설정해요.</li>
+              <li>초대방 링크를 공유해 친구를 추가해요.</li>
+              <li>하고 싶은 종목에서 고르거나 직접 입력한 뒤 주변 장소를 확인해요.</li>
+              <li>모두 준비되면 장소를 추첨해요.</li>
+            </ol>
+          </section>
+
+          <section>
+            <h3>OMYS가 골라주기</h3>
+            <ol>
+              <li>출발 위치를 설정해요.</li>
+              <li>
+                장소 숨기기를 설정해요.
+                <ul>
+                  <li>켜면 미스터리 스팟에 도착할 때까지 장소가 보이지 않아요.</li>
+                  <li>끄면 출발 전에 미스터리 스팟을 확인할 수 있어요.</li>
+                </ul>
+              </li>
+            </ol>
+          </section>
+
+          <section>
+            <h3>할 거 없을 때</h3>
+            <ul>
+              <li>활동 뽑기에서 원하는 분위기 탭을 선택하고 바로 시작해요.</li>
+            </ul>
+          </section>
+        </div>
+      </details>
       <p className="landing-foot">회원가입 없이 · 링크 하나로 · 바로 출발</p>
     </Shell>
   )

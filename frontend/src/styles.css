@@ -312,18 +312,26 @@ p {
   right: 0;
   bottom: 21%;
 }
-.features {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-}
-.features article {
-  padding: 28px;
+.usage-guide {
+  overflow: hidden;
   background: #fff;
-  border: 1px solid #eeedf4;
+  border: 1px solid #e8e5f4;
   border-radius: 22px;
+  box-shadow: 0 12px 35px #4a44750c;
 }
-.features article > span {
+.usage-guide summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 22px;
+  cursor: pointer;
+  list-style: none;
+}
+.usage-guide summary::-webkit-details-marker {
+  display: none;
+}
+.usage-guide__icon {
   width: 45px;
   height: 45px;
   display: grid;
@@ -332,15 +340,57 @@ p {
   background: #efedff;
   border-radius: 14px;
 }
-.features h3 {
-  margin: 17px 0 8px;
+.usage-guide summary strong,
+.usage-guide summary small {
+  display: block;
+}
+.usage-guide summary strong {
+  margin-bottom: 4px;
   font-size: 16px;
 }
-.features p {
+.usage-guide summary small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.usage-guide__chevron {
+  color: #89839e;
+  transition: transform 0.2s ease;
+}
+.usage-guide[open] .usage-guide__chevron {
+  transform: rotate(180deg);
+}
+.usage-guide__content {
+  padding: 3px 24px 25px 82px;
+  border-top: 1px solid #f1eff7;
+}
+.usage-guide__content > p {
+  margin: 20px 0 24px;
+  color: #504a63;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.usage-guide__content section + section {
+  margin-top: 24px;
+}
+.usage-guide__content h3 {
+  margin: 0 0 10px;
+  color: #423b62;
+  font-size: 15px;
+}
+.usage-guide__content ol,
+.usage-guide__content ul {
   margin: 0;
+  padding-left: 20px;
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.8;
+}
+.usage-guide__content li::marker {
+  color: #7163e5;
+  font-weight: 700;
+}
+.usage-guide__content li ul {
+  margin-top: 5px;
 }
 .landing-foot {
   margin: 35px 0 0;
@@ -1963,24 +2013,11 @@ select:focus {
     order: -1;
     display: none;
   }
-  .features {
-    grid-template-columns: 1fr;
-    text-align: left;
+  .usage-guide summary {
+    padding: 18px;
   }
-  .features article {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    column-gap: 15px;
-    padding: 20px;
-  }
-  .features article > span {
-    grid-row: 1/3;
-  }
-  .features h3 {
-    margin: 3px 0 4px;
-  }
-  .features p {
-    grid-column: 2;
+  .usage-guide__content {
+    padding: 1px 20px 22px;
   }
   .topbar + .page--wide .logo {
     display: none;
