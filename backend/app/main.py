@@ -577,6 +577,9 @@ async def set_conditions(
     require_host(participant)
     if room.mode != "omys" or room.status != "waiting":
         raise HTTPException(409, "조건을 설정할 수 없는 상태입니다.")
+    unsupported_categories = set(payload.preferred_categories) - set(CATEGORIES)
+    if unsupported_categories:
+        raise HTTPException(422, "지원하지 않는 카테고리가 포함되어 있습니다.")
     condition = OmysCondition(
         room_id=room.id,
         latitude=room.departure_latitude,

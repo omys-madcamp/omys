@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import re
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
@@ -36,6 +37,160 @@ CATEGORY_DISCOVERY_QUERIES = {
     "쇼핑·구경": ["쇼핑몰", "소품샵"],
     "데이트코스·이색 체험": ["공방", "아쿠아리움"],
 }
+
+# 장소 API의 키워드 검색은 검색어와 직접 관련 없는 음식점 등을 함께 반환할 수 있다.
+# 공급자별 카테고리명과 장소명을 함께 확인해 OMYS 카테고리에 맞는 결과만 사용한다.
+CATEGORY_MATCH_TERMS = {
+    "게임·실내 놀거리": (
+        "게임",
+        "방탈출",
+        "피시방",
+        "pc방",
+        "오락실",
+        "만화카페",
+        "vr",
+        "가상현실",
+        "스크린야구",
+        "스크린골프",
+        "양궁",
+        "사격",
+        "당구",
+        "포켓볼",
+        "다트",
+        "노래방",
+        "홀덤",
+        "낚시카페",
+        "레이저태그",
+        "서바이벌",
+        "퍼즐카페",
+    ),
+    "운동·액티비티": (
+        "스포츠",
+        "액티비티",
+        "볼링",
+        "클라이밍",
+        "스케이트",
+        "배드민턴",
+        "탁구",
+        "테니스",
+        "풋살",
+        "농구",
+        "수영",
+        "러닝",
+        "자전거",
+        "등산",
+        "트램펄린",
+        "카트",
+        "승마",
+        "짚라인",
+        "카약",
+        "서핑",
+        "패러글라이딩",
+        "체육",
+    ),
+    "관광·산책": (
+        "관광",
+        "산책",
+        "공원",
+        "전망대",
+        "수목원",
+        "식물원",
+        "둘레길",
+        "산책로",
+        "해변",
+        "궁궐",
+        "한옥마을",
+        "성곽",
+        "유적",
+        "벽화마을",
+        "유람선",
+        "크루즈",
+    ),
+    "쇼핑·구경": (
+        "쇼핑",
+        "백화점",
+        "아울렛",
+        "복합문화공간",
+        "소품",
+        "편집숍",
+        "편집샵",
+        "빈티지",
+        "서점",
+        "레코드",
+        "캐릭터숍",
+        "캐릭터샵",
+        "팝업스토어",
+        "플리마켓",
+        "전통시장",
+        "지하상가",
+        "문구",
+        "마트",
+    ),
+    "데이트코스·이색 체험": (
+        "체험",
+        "공방",
+        "도자기",
+        "향수",
+        "반지",
+        "가죽공예",
+        "터프팅",
+        "베이킹",
+        "쿠킹",
+        "드로잉",
+        "플라워",
+        "캔들",
+        "퍼스널컬러",
+        "사진관",
+        "한복대여",
+        "교복대여",
+        "찜질방",
+        "아쿠아리움",
+        "수족관",
+        "동물카페",
+        "천문대",
+        "놀이공원",
+    ),
+}
+
+FOOD_CATEGORY_TERMS = (
+    "음식점",
+    "한식",
+    "양식",
+    "중식",
+    "일식",
+    "분식",
+    "패스트푸드",
+    "치킨",
+    "피자",
+    "술집",
+    "주점",
+)
+
+
+def _normalized(value: str) -> str:
+    return re.sub(r"[\s·,>/_\-]+", "", value.casefold())
+
+
+def place_matches_category(place: PlaceResult, category: str | None) -> bool:
+    """Return whether a provider result really belongs to the requested OMYS category."""
+    if not category or category == "완전 랜덤":
+        return True
+    terms = CATEGORY_MATCH_TERMS.get(category)
+    if not terms:
+        return False
+    if place.category == category:
+        return True
+
+    name = _normalized(place.name)
+    provider_category = _normalized(place.category)
+    normalized_terms = tuple(_normalized(term) for term in terms)
+
+    # A restaurant whose name happens to contain a search keyword is still a restaurant.
+    if any(_normalized(term) in provider_category for term in FOOD_CATEGORY_TERMS) and not any(
+        term in provider_category for term in normalized_terms
+    ):
+        return False
+    return any(term in name or term in provider_category for term in normalized_terms)
 
 
 class PlacesProvider(ABC):
@@ -404,6 +559,8 @@ class CachedPlacesProvider(PlacesProvider):
         if cached and cached[0] > time.monotonic():
             return cached[1]
         result = await self.provider.search(query, latitude, longitude, category)
+        if category in CATEGORY_MATCH_TERMS:
+            result = [place for place in result if place_matches_category(place, category)]
         self.cache[key] = (time.monotonic() + self.ttl, result)
         return result
 

@@ -1,7 +1,8 @@
 import httpx
 import pytest
 
-from app.places import KakaoPlacesProvider
+from app.places import CachedPlacesProvider, KakaoPlacesProvider, place_matches_category
+from app.schemas import PlaceResult
 from app.services import opening_is_viable
 
 
@@ -57,3 +58,57 @@ async def test_kakao_search_and_verification_use_origin_and_place_id():
     assert requests[1].url.params["radius"] == "2000"
 
     await provider.client.aclose()
+
+
+def test_category_match_rejects_restaurants_from_game_results():
+    board_game = PlaceResult(
+        external_place_id="game",
+        name="시청 보드게임",
+        category="문화,예술 > 게임 > 보드게임카페",
+        address="서울 중구",
+        latitude=37.5665,
+        longitude=126.9780,
+    )
+    restaurant = PlaceResult(
+        external_place_id="food",
+        name="게임존 숯불닭갈비",
+        category="음식점 > 한식 > 육류,고기",
+        address="서울 중구",
+        latitude=37.5665,
+        longitude=126.9780,
+    )
+
+    assert place_matches_category(board_game, "게임·실내 놀거리") is True
+    assert place_matches_category(restaurant, "게임·실내 놀거리") is False
+
+
+@pytest.mark.asyncio
+async def test_cached_provider_filters_irrelevant_category_results():
+    class MixedProvider(KakaoPlacesProvider):
+        async def search(self, query, latitude, longitude, category=None):
+            return [
+                PlaceResult(
+                    external_place_id="game",
+                    name="강남 방탈출",
+                    category="스포츠,오락 > 방탈출카페",
+                    address="서울 강남구",
+                    latitude=latitude,
+                    longitude=longitude,
+                ),
+                PlaceResult(
+                    external_place_id="food",
+                    name="강남 맛집",
+                    category="음식점 > 한식",
+                    address="서울 강남구",
+                    latitude=latitude,
+                    longitude=longitude,
+                ),
+            ]
+
+    provider = MixedProvider("test-key")
+    await provider.client.aclose()
+    cached = CachedPlacesProvider(provider, ttl=60)
+
+    places = await cached.search("방탈출", 37.5665, 126.9780, "게임·실내 놀거리")
+
+    assert [place.external_place_id for place in places] == ["game"]

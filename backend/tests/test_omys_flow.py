@@ -68,6 +68,23 @@ def test_no_candidate_has_actionable_message(client):
     assert "이동 시간" in response.json()["detail"]
 
 
+def test_conditions_reject_unsupported_category(client):
+    host = create_omys(client)
+    response = client.post(
+        f"/api/rooms/{host['invite_code']}/conditions",
+        headers=auth(host["participant_token"]),
+        json={
+            "transport_mode": "walk",
+            "max_travel_minutes": 30,
+            "party_size": 2,
+            "preferred_categories": ["맛집"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "지원하지 않는 카테고리" in response.json()["detail"]
+
+
 def test_destination_can_be_revealed_by_button_without_arrival(client):
     host = create_omys(client, hide_until_arrival=False)
     code = host["invite_code"]
