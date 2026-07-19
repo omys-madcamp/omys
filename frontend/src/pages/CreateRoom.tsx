@@ -109,6 +109,13 @@ export default function CreateRoom() {
     setError('')
   }
 
+  const updateLocationFromMap = (location: KakaoLocation) => {
+    setLocationPreview(location)
+    setForm((prev) => ({ ...prev, location: location.label }))
+    setLocationConfirmed(false)
+    setError('')
+  }
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!locationConfirmed || !locationPreview) {
@@ -207,6 +214,8 @@ export default function CreateRoom() {
             location={locationPreview}
             confirmed={locationConfirmed}
             onConfirm={confirmLocation}
+            onLocationChange={updateLocationFromMap}
+            onMoveStart={() => setLocationConfirmed(false)}
           />
         )}
         {mode === 'friends' && (

@@ -26,15 +26,30 @@ export type KakaoLocation = {
   longitude: number
 }
 
+type KakaoLatLng = {
+  getLat: () => number
+  getLng: () => number
+}
+
+type KakaoMap = {
+  relayout: () => void
+  setCenter: (center: unknown) => void
+  getCenter: () => KakaoLatLng
+}
+
 export type KakaoMaps = {
   load: (callback: () => void) => void
-  LatLng: new (latitude: number, longitude: number) => unknown
+  LatLng: new (latitude: number, longitude: number) => KakaoLatLng
   Map: new (
     container: HTMLElement,
     options: { center: unknown; level: number },
-  ) => { relayout: () => void; setCenter: (center: unknown) => void }
+  ) => KakaoMap
   Marker: new (options: { position: unknown; map?: unknown }) => {
     setMap: (map: unknown | null) => void
+  }
+  event: {
+    addListener: (target: unknown, type: string, handler: () => void) => void
+    removeListener: (target: unknown, type: string, handler: () => void) => void
   }
   services: {
     Status: { OK: string; ZERO_RESULT: string }
