@@ -32,8 +32,8 @@ export type KakaoLatLng = {
 }
 
 export type KakaoPoint = {
-  getX: () => number
-  getY: () => number
+  x: number
+  y: number
 }
 
 export type KakaoLatLngBounds = {
