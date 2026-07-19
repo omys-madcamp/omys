@@ -89,8 +89,8 @@ docker compose ps
 ```
 
 - 웹: http://localhost:8080
-- API: http://localhost:8000
-- PostgreSQL: localhost:5432
+- API: http://localhost:8010
+- PostgreSQL: localhost:5433
 
 백엔드 컨테이너는 DB healthcheck 뒤 `alembic upgrade head`를 실행합니다. DB만 실행하려면 `docker compose up -d db`, 로컬 백엔드를 PostgreSQL에 연결하려면 다음처럼 설정합니다.
 

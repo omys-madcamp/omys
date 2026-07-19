@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 
 import { DepartureLocationPreview } from '../components/DepartureLocationPreview'
+import { clipRouteToBounds, shouldShowDestination } from '../components/MysteryNavigation'
 import { loadKakaoMaps, type KakaoLocation } from '../lib/kakao'
 
 vi.mock('../lib/kakao', () => ({
@@ -40,11 +41,7 @@ describe('DepartureLocationPreview map selection', () => {
     }
 
     class Geocoder {
-      coord2Address(
-        _longitude: number,
-        _latitude: number,
-        callback: (items: unknown[]) => void,
-      ) {
+      coord2Address(_longitude: number, _latitude: number, callback: (items: unknown[]) => void) {
         callback([
           {
             road_address: { address_name: '서울 종로구 새문안로 55' },
@@ -106,5 +103,52 @@ describe('DepartureLocationPreview map selection', () => {
     expect(screen.getByText('37.57090, 126.97270')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /이곳이 맞아요/ }))
     expect(screen.getByText('출발 위치로 확정했어요')).toBeInTheDocument()
+  })
+})
+
+describe('MysteryNavigation map geometry', () => {
+  class LatLng {
+    constructor(
+      private latitude: number,
+      private longitude: number,
+    ) {}
+    getLat() {
+      return this.latitude
+    }
+    getLng() {
+      return this.longitude
+    }
+  }
+
+  it('clips a route segment that crosses the viewport with both endpoints outside', () => {
+    let containCalls = 0
+    const result = clipRouteToBounds(
+      [
+        { latitude: 5, longitude: -5 },
+        { latitude: 5, longitude: 15 },
+      ],
+      {
+        contain: () => {
+          containCalls += 1
+          return false
+        },
+        getSouthWest: () => new LatLng(0, 0),
+        getNorthEast: () => new LatLng(10, 10),
+      },
+      { LatLng },
+    )
+
+    expect(containCalls).toBe(2)
+    expect(result).toEqual([
+      { latitude: 5, longitude: 0 },
+      { latitude: 5, longitude: 10 },
+    ])
+  })
+
+  it('keeps the destination marker stable between the show and hide thresholds', () => {
+    expect(shouldShowDestination(false, 101, true)).toBe(false)
+    expect(shouldShowDestination(false, 100, true)).toBe(true)
+    expect(shouldShowDestination(true, 149, true)).toBe(true)
+    expect(shouldShowDestination(true, 150, true)).toBe(false)
   })
 })

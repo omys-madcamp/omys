@@ -1,5 +1,6 @@
 FROM node:24-alpine AS build
 WORKDIR /app
+ARG NPM_CONFIG_STRICT_SSL
 COPY package*.json ./
 RUN npm ci
 COPY . .

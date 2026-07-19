@@ -43,10 +43,35 @@ def test_destination_hidden_until_arrival_and_manual_fallback(client):
         room = db.scalar(select(Room).where(Room.invite_code == code))
         place = db.get(PlaceCandidate, room.selected_place_id)
         target = {"latitude": place.latitude, "longitude": place.longitude, "accuracy": 20}
+        far_target = {
+            "latitude": place.latitude - 0.002,
+            "longitude": place.longitude,
+            "accuracy": 20,
+        }
+
+    far_nav = client.post(f"/api/rooms/{code}/navigation", headers=headers, json=far_target)
+    assert far_nav.status_code == 200
+    far_body = far_nav.json()
+    assert far_body["reveal_available"] is False
+    assert "destination" not in far_body
+    assert len(far_body["route_path"]) >= 2
+    assert far_body["route_path"][-1] != {
+        "latitude": target["latitude"],
+        "longitude": target["longitude"],
+    }
+    assert (
+        client.post(f"/api/rooms/{code}/reveal", headers=headers, json=far_target).status_code
+        == 409
+    )
+
     nav = client.post(f"/api/rooms/{code}/navigation", headers=headers, json=target)
     assert nav.status_code == 200
     assert nav.json()["reveal_available"] is True
-    assert "name" not in nav.text and "address" not in nav.text and "latitude" not in nav.text
+    assert nav.json()["destination"] == {
+        "latitude": target["latitude"],
+        "longitude": target["longitude"],
+    }
+    assert "name" not in nav.text and "address" not in nav.text
     reveal = client.post(f"/api/rooms/{code}/reveal", headers=headers, json=target)
     assert reveal.status_code == 200
     assert reveal.json()["selected_place"]["name"]

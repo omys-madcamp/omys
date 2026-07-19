@@ -26,27 +26,61 @@ export type KakaoLocation = {
   longitude: number
 }
 
-type KakaoLatLng = {
+export type KakaoLatLng = {
   getLat: () => number
   getLng: () => number
 }
 
-type KakaoMap = {
+export type KakaoPoint = {
+  getX: () => number
+  getY: () => number
+}
+
+export type KakaoLatLngBounds = {
+  contain: (position: KakaoLatLng) => boolean
+  getSouthWest: () => KakaoLatLng
+  getNorthEast: () => KakaoLatLng
+}
+
+export type KakaoMapProjection = {
+  pointFromCoords: (position: KakaoLatLng) => KakaoPoint
+}
+
+export type KakaoMap = {
   relayout: () => void
-  setCenter: (center: unknown) => void
+  setCenter: (center: KakaoLatLng) => void
   getCenter: () => KakaoLatLng
+  getBounds: () => KakaoLatLngBounds
+  getProjection: () => KakaoMapProjection
+  setDraggable: (draggable: boolean) => void
+  setZoomable: (zoomable: boolean) => void
+}
+
+export type KakaoMarker = {
+  setMap: (map: KakaoMap | null) => void
+  setPosition: (position: KakaoLatLng) => void
+  setVisible: (visible: boolean) => void
+}
+
+export type KakaoPolyline = {
+  setMap: (map: KakaoMap | null) => void
+  setPath: (path: KakaoLatLng[]) => void
 }
 
 export type KakaoMaps = {
   load: (callback: () => void) => void
   LatLng: new (latitude: number, longitude: number) => KakaoLatLng
-  Map: new (
-    container: HTMLElement,
-    options: { center: unknown; level: number },
-  ) => KakaoMap
-  Marker: new (options: { position: unknown; map?: unknown }) => {
-    setMap: (map: unknown | null) => void
-  }
+  Map: new (container: HTMLElement, options: { center: KakaoLatLng; level: number }) => KakaoMap
+  Marker: new (options: { position: KakaoLatLng; map?: KakaoMap }) => KakaoMarker
+  Polyline: new (options: {
+    path: KakaoLatLng[]
+    map?: KakaoMap
+    strokeWeight?: number
+    strokeColor?: string
+    strokeOpacity?: number
+    strokeStyle?: string
+    zIndex?: number
+  }) => KakaoPolyline
   event: {
     addListener: (target: unknown, type: string, handler: () => void) => void
     removeListener: (target: unknown, type: string, handler: () => void) => void

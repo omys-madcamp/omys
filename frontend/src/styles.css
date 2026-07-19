@@ -1339,11 +1339,16 @@ select:focus {
   margin: -24px -20px -80px;
 }
 .mystery-map {
-  height: 43vh;
-  min-height: 330px;
+  width: 100%;
+  height: 330px;
   position: relative;
   overflow: hidden;
+  margin-inline: auto;
   background: #e9e7f1;
+}
+.mystery-map__canvas {
+  position: absolute;
+  inset: 0;
 }
 .map-grid {
   position: absolute;
@@ -1357,62 +1362,20 @@ select:focus {
     38px 38px,
     100px 100px;
 }
-.mystery-map svg {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-}
-.route-shadow,
-.route-path {
-  fill: none;
-  stroke-linecap: round;
-}
-.route-shadow {
-  stroke: white;
-  stroke-width: 14;
-}
-.route-path {
-  stroke: #7162eb;
-  stroke-width: 7;
-  stroke-dasharray: 11 7;
-  animation: dash 18s linear infinite;
-}
-@keyframes dash {
-  to {
-    stroke-dashoffset: -200;
-  }
-}
-.current-dot {
-  width: 45px;
-  height: 45px;
+.mystery-map__fallback {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 8px;
   position: absolute;
-  left: calc(15% - 22px);
-  bottom: calc(9% - 22px);
-  color: white;
-  background: #6152dc;
-  border: 4px solid white;
-  border-radius: 50%;
-  box-shadow: 0 7px 22px #4a428058;
-  transform: rotate(35deg);
-}
-.hidden-zone {
-  width: 61px;
-  height: 61px;
-  display: grid;
-  place-items: center;
-  position: absolute;
-  top: 4%;
-  right: 8%;
-  color: white;
-  background: #6255dc;
-  border: 5px solid #ffffffd4;
-  border-radius: 50%;
-  box-shadow: 0 0 0 12px #6657ed1e;
+  inset: 0;
+  color: #6255dc;
+  font-size: 12px;
+  font-weight: 800;
 }
 .map-secret {
   position: absolute;
+  z-index: 4;
   top: 15px;
   left: 50%;
   transform: translateX(-50%);

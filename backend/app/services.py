@@ -3,19 +3,68 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .geo import distance_meters, travel_minutes
+from .geo import Coordinate, distance_meters, travel_minutes
 from .models import PlaceCandidate, Room, Selection
 from .places import PlacesProvider
 from .schemas import PlaceResult
 
 
 NO_CANDIDATE_MESSAGE = "현재 조건에 맞으면서 영업 중인 장소를 찾지 못했습니다. 이동 시간, 예산 또는 제외 조건을 조금 넓혀 주세요."
+
+
+def _coordinates_from_kakao_directions(payload: dict) -> list[Coordinate]:
+    routes = payload.get("routes") or []
+    if not routes:
+        return []
+
+    coordinates: list[Coordinate] = []
+    for section in routes[0].get("sections") or []:
+        for road in section.get("roads") or []:
+            vertices = road.get("vertexes") or []
+            for index in range(0, len(vertices) - 1, 2):
+                point = (float(vertices[index + 1]), float(vertices[index]))
+                if not coordinates or coordinates[-1] != point:
+                    coordinates.append(point)
+    return coordinates
+
+
+async def navigation_route(origin: Coordinate, destination: Coordinate) -> list[Coordinate]:
+    settings = get_settings()
+    fallback = [origin, destination]
+    if settings.environment == "test" or not settings.kakao_rest_api_key:
+        return fallback
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                "https://apis-navi.kakaomobility.com/v1/directions",
+                headers={"Authorization": f"KakaoAK {settings.kakao_rest_api_key}"},
+                params={
+                    "origin": f"{origin[1]},{origin[0]}",
+                    "destination": f"{destination[1]},{destination[0]}",
+                    "priority": "RECOMMEND",
+                    "summary": "false",
+                },
+            )
+            response.raise_for_status()
+            route = _coordinates_from_kakao_directions(response.json())
+    except (httpx.HTTPError, TypeError, ValueError):
+        return fallback
+
+    if len(route) < 2:
+        return fallback
+    if route[0] != origin:
+        route.insert(0, origin)
+    if route[-1] != destination:
+        route.append(destination)
+    return route
 
 
 def opening_is_viable(place: PlaceResult, eta_minutes: int) -> bool:

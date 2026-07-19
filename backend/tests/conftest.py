@@ -9,12 +9,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.database import Base, engine
-from app.main import app, request_windows
+from app.main import app, navigation_routes, request_windows
 
 
 @pytest.fixture(autouse=True)
 def clean_database():
     request_windows.clear()
+    navigation_routes.clear()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     yield

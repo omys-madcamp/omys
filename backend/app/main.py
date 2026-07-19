@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 from .activities import ACTIVITIES, ACTIVITY_BY_ID, MOODS, choose_activity
 from .config import get_settings
 from .database import Base, engine, get_db
-from .geo import distance_meters, navigation_hint, travel_minutes
+from .geo import (
+    closest_path_index,
+    distance_meters,
+    navigation_hint,
+    slice_path_ahead,
+    travel_minutes,
+)
 from .models import (
     ActivitySession,
     AnalyticsEvent,
@@ -49,6 +55,7 @@ from .services import (
     NO_CANDIDATE_MESSAGE,
     candidate_from_place,
     lock_selection,
+    navigation_route,
     opening_is_viable,
     place_payload,
 )
@@ -106,6 +113,7 @@ app.add_middleware(
 )
 
 request_windows: dict[str, deque[float]] = defaultdict(deque)
+navigation_routes: dict[str, tuple[list[tuple[float, float]], int]] = {}
 
 
 @app.middleware("http")
@@ -711,14 +719,14 @@ def start_navigation(
 
 
 @app.post("/api/rooms/{code}/navigation")
-def navigation(
+async def navigation(
     code: str,
     payload: LocationUpdate,
     token: str | None = Depends(token_header),
     db: Session = Depends(get_db),
 ):
     room = room_by_code(db, code)
-    get_participant(db, room, token)
+    participant = get_participant(db, room, token)
     if room.status not in {"drawn", "navigating"} or not room.selected_place_id:
         raise HTTPException(409, "이동 중인 방이 아닙니다.")
     place = db.get(PlaceCandidate, room.selected_place_id)
@@ -732,9 +740,35 @@ def navigation(
         ),
     )
     mode = room.condition.transport_mode if room.condition else "walk"
-    threshold = max(100, min(200, (payload.accuracy or 0) + 50))
-    reveal_available = not room.hide_until_arrival or remaining <= threshold
-    return {
+    reveal_available = not room.hide_until_arrival or remaining <= 100
+
+    origin = (payload.latitude, payload.longitude)
+    destination = (place.latitude, place.longitude)
+    cached_route = navigation_routes.get(participant.id)
+    route = cached_route[0] if cached_route else []
+    consumed_index = cached_route[1] if cached_route else 0
+    if not route or route[-1] != destination:
+        route = await navigation_route(origin, destination)
+        consumed_index = 0
+    else:
+        remaining_route = route[consumed_index:]
+        next_index = consumed_index + closest_path_index(
+            remaining_route,
+            payload.latitude,
+            payload.longitude,
+        )
+        nearest = route[next_index]
+        if distance_meters(payload.latitude, payload.longitude, nearest[0], nearest[1]) > 80:
+            route = await navigation_route(origin, destination)
+            consumed_index = 0
+        else:
+            consumed_index = max(consumed_index, next_index)
+    navigation_routes[participant.id] = (route, consumed_index)
+
+    route_ahead = [origin, *route[consumed_index + 1 :]]
+    reserve_at_end = 0 if reveal_available else 100
+    visible_route = slice_path_ahead(route_ahead, 300, reserve_at_end)
+    response = {
         "remaining_meters": round(remaining),
         "eta_minutes": travel_minutes(remaining, mode),
         "progress_percent": max(0, min(100, round((1 - remaining / initial) * 100))),
@@ -744,12 +778,22 @@ def navigation(
         "reveal_available": reveal_available,
         "hide_until_arrival": room.hide_until_arrival,
         "accuracy_meters": payload.accuracy,
+        "route_path": [
+            {"latitude": latitude, "longitude": longitude} for latitude, longitude in visible_route
+        ],
+        "consumed_index": consumed_index,
         "message": (
             "목적지 근처에 도착하면 공개할 수 있습니다"
             if room.hide_until_arrival
             else "공개 버튼을 누르면 목적지를 확인할 수 있습니다"
         ),
     }
+    if reveal_available:
+        response["destination"] = {
+            "latitude": place.latitude,
+            "longitude": place.longitude,
+        }
+    return response
 
 
 @app.post("/api/rooms/{code}/reveal")
@@ -772,8 +816,7 @@ def reveal(
         distance = distance_meters(
             payload.latitude, payload.longitude, place.latitude, place.longitude
         )
-        threshold = max(100, min(200, (payload.accuracy or 0) + 50))
-        if distance > threshold:
+        if distance > 100:
             raise HTTPException(409, "목적지에 조금 더 가까이 가면 공개할 수 있어요.")
     room.status = "revealed"
     room.revealed_at = datetime.now(timezone.utc)
