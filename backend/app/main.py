@@ -5,7 +5,8 @@ import secrets
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -30,6 +31,7 @@ from .models import (
     Participant,
     PlaceCandidate,
     Room,
+    Selection,
 )
 from .places import CATEGORIES, CATEGORY_DISCOVERY_QUERIES, places_provider
 from .schemas import (
@@ -85,6 +87,14 @@ EVENTS = {
     "activity_completed",
     "activity_abandoned",
     "activity_shared",
+}
+
+KST = ZoneInfo("Asia/Seoul")
+STATS_RANGES = {
+    "6h": {"label": "최근 6시간", "bucket_hours": 1, "bucket_count": 6},
+    "12h": {"label": "최근 12시간", "bucket_hours": 1, "bucket_count": 12},
+    "24h": {"label": "최근 24시간", "bucket_hours": 1, "bucket_count": 24},
+    "3d": {"label": "최근 3일", "bucket_hours": 6, "bucket_count": 12},
 }
 
 
@@ -865,12 +875,174 @@ def analytics(payload: AnalyticsCreate, db: Session = Depends(get_db)):
     return {"accepted": True}
 
 
+def aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def stats_period(db: Session, range_name: str) -> dict:
+    config = STATS_RANGES[range_name]
+    bucket_hours = config["bucket_hours"]
+    bucket_count = config["bucket_count"]
+    now = datetime.now(timezone.utc)
+    local_now = now.astimezone(KST)
+    bucket_hour = local_now.hour - (local_now.hour % bucket_hours)
+    current_bucket = local_now.replace(hour=bucket_hour, minute=0, second=0, microsecond=0)
+    first_bucket = current_bucket - timedelta(hours=bucket_hours * (bucket_count - 1))
+    start = first_bucket.astimezone(timezone.utc)
+
+    buckets = []
+    visitor_sets: list[set[str]] = []
+    for index in range(bucket_count):
+        bucket_start = first_bucket + timedelta(hours=bucket_hours * index)
+        bucket_end = bucket_start + timedelta(hours=bucket_hours)
+        buckets.append(
+            {
+                "start": bucket_start.isoformat(),
+                "end": bucket_end.isoformat(),
+                "label": (
+                    bucket_start.strftime("%m/%d %H시")
+                    if bucket_hours > 1
+                    else bucket_start.strftime("%H시")
+                ),
+                "visitors": 0,
+                "pageviews": 0,
+                "rooms_created": 0,
+                "rooms_with_2_plus": 0,
+                "draw_completed": 0,
+                "revealed": 0,
+                "shares": 0,
+            }
+        )
+        visitor_sets.append(set())
+
+    def bucket_index(value: datetime) -> int | None:
+        local_value = aware_utc(value).astimezone(KST)
+        elapsed_hours = (local_value - first_bucket).total_seconds() / 3600
+        index = int(elapsed_hours // bucket_hours)
+        return index if 0 <= index < bucket_count else None
+
+    events = db.scalars(
+        select(AnalyticsEvent).where(
+            AnalyticsEvent.created_at >= start,
+            AnalyticsEvent.created_at <= now,
+        )
+    ).all()
+    period_visitors: set[str] = set()
+    period_shares = 0
+    for event in events:
+        index = bucket_index(event.created_at)
+        if index is None:
+            continue
+        if event.event_name == "landing_view" and event.anonymous_session_id != "server-generated":
+            buckets[index]["pageviews"] += 1
+            visitor_sets[index].add(event.anonymous_session_id)
+            period_visitors.add(event.anonymous_session_id)
+        elif event.event_name == "result_shared":
+            buckets[index]["shares"] += 1
+            period_shares += 1
+
+    rooms = db.scalars(select(Room).where(Room.created_at >= start, Room.created_at <= now)).all()
+    for room in rooms:
+        index = bucket_index(room.created_at)
+        if index is not None:
+            buckets[index]["rooms_created"] += 1
+
+    participants = db.scalars(
+        select(Participant).order_by(Participant.room_id, Participant.created_at)
+    ).all()
+    participants_by_room: dict[str, list[Participant]] = defaultdict(list)
+    for participant in participants:
+        participants_by_room[participant.room_id].append(participant)
+    multi_room_times = [
+        room_participants[1].created_at
+        for room_participants in participants_by_room.values()
+        if len(room_participants) >= 2
+    ]
+    period_multi_rooms = 0
+    for created_at in multi_room_times:
+        index = bucket_index(created_at)
+        if index is not None:
+            buckets[index]["rooms_with_2_plus"] += 1
+            period_multi_rooms += 1
+
+    selections = db.scalars(
+        select(Selection).where(
+            Selection.attempt == 1,
+            Selection.created_at >= start,
+            Selection.created_at <= now,
+        )
+    ).all()
+    for selection in selections:
+        index = bucket_index(selection.created_at)
+        if index is not None:
+            buckets[index]["draw_completed"] += 1
+
+    revealed_rooms = db.scalars(
+        select(Room).where(Room.revealed_at >= start, Room.revealed_at <= now)
+    ).all()
+    for room in revealed_rooms:
+        index = bucket_index(room.revealed_at)
+        if index is not None:
+            buckets[index]["revealed"] += 1
+
+    for index, visitors in enumerate(visitor_sets):
+        buckets[index]["visitors"] = len(visitors)
+
+    rooms_created = len(rooms)
+    draw_completed = len(selections)
+    revealed = len(revealed_rooms)
+    return {
+        "range": range_name,
+        "label": config["label"],
+        "timezone": "Asia/Seoul",
+        "bucket_hours": bucket_hours,
+        "start": start.isoformat(),
+        "end": now.isoformat(),
+        "totals": {
+            "visitors": len(period_visitors),
+            "pageviews": sum(bucket["pageviews"] for bucket in buckets),
+            "rooms_created": rooms_created,
+            "rooms_with_2_plus": period_multi_rooms,
+            "draw_completed": draw_completed,
+            "revealed": revealed,
+            "shares": period_shares,
+            "conversion": {
+                "room_to_draw_percent": (
+                    round(draw_completed / rooms_created * 100, 1) if rooms_created else 0
+                ),
+                "draw_to_reveal_percent": (
+                    round(revealed / draw_completed * 100, 1) if draw_completed else 0
+                ),
+            },
+        },
+        "series": buckets,
+    }
+
+
 @app.get("/api/admin/stats")
-def admin_stats(x_admin_key: str | None = Header(default=None), db: Session = Depends(get_db)):
+def admin_stats(
+    range_name: str = Query(default="24h", alias="range", pattern="^(6h|12h|24h|3d)$"),
+    x_admin_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
     if not settings.admin_api_key or x_admin_key != settings.admin_api_key:
         raise HTTPException(403, "관리자 키를 확인해 주세요.")
     visitors = (
-        db.scalar(select(func.count(func.distinct(AnalyticsEvent.anonymous_session_id)))) or 0
+        db.scalar(
+            select(func.count(func.distinct(AnalyticsEvent.anonymous_session_id))).where(
+                AnalyticsEvent.event_name == "landing_view",
+                AnalyticsEvent.anonymous_session_id != "server-generated",
+            )
+        )
+        or 0
+    )
+    pageviews = (
+        db.scalar(
+            select(func.count(AnalyticsEvent.id)).where(AnalyticsEvent.event_name == "landing_view")
+        )
+        or 0
     )
     rooms = db.scalar(select(func.count(Room.id))) or 0
     multi_rooms = (
@@ -896,6 +1068,7 @@ def admin_stats(x_admin_key: str | None = Header(default=None), db: Session = De
     )
     return {
         "visitors": visitors,
+        "pageviews": pageviews,
         "rooms_created": rooms,
         "rooms_with_2_plus": multi_rooms,
         "draw_completed": drawn,
@@ -905,4 +1078,5 @@ def admin_stats(x_admin_key: str | None = Header(default=None), db: Session = De
             "room_to_draw_percent": round(drawn / rooms * 100, 1) if rooms else 0,
             "draw_to_reveal_percent": round(revealed / drawn * 100, 1) if drawn else 0,
         },
+        "period": stats_period(db, range_name),
     }

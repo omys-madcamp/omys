@@ -5,6 +5,7 @@ import JoinRoom from './pages/JoinRoom'
 import RoomPage from './pages/RoomPage'
 import SharePage from './pages/SharePage'
 import ActivitiesPage from './pages/ActivitiesPage'
+import AdminPage from './pages/AdminPage'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="/room/:code" element={<RoomPage />} />
       <Route path="/share/:code" element={<SharePage />} />
       <Route path="/activities" element={<ActivitiesPage />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

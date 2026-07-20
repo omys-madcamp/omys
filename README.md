@@ -173,6 +173,10 @@ cd ..\backend
 curl -H "X-Admin-Key: $ADMIN_API_KEY" http://localhost:8000/api/admin/stats
 ```
 
+배포 후에는 `https://<배포주소>/admin`에서 `ADMIN_API_KEY`를 입력해 운영 통계를 확인할 수 있습니다.
+기간은 최근 6시간, 12시간, 24시간, 3일 중 선택하며 모든 구간은 한국 시간 기준입니다.
+API를 직접 호출할 때는 `range=6h`, `12h`, `24h`, `3d` 중 하나를 지정합니다.
+
 ## 배포
 
 권장 구성은 관리형 PostgreSQL + 컨테이너 FastAPI + CDN/정적 호스팅 프런트입니다.

@@ -40,6 +40,39 @@ export type Room = {
   revealed_at?: string | null
 }
 
+export type AdminMetricSummary = {
+  visitors: number
+  pageviews: number
+  rooms_created: number
+  rooms_with_2_plus: number
+  draw_completed: number
+  revealed: number
+  shares: number
+  conversion: {
+    room_to_draw_percent: number
+    draw_to_reveal_percent: number
+  }
+}
+
+export type AdminStatsPoint = Omit<AdminMetricSummary, 'conversion'> & {
+  start: string
+  end: string
+  label: string
+}
+
+export type AdminStats = AdminMetricSummary & {
+  period: {
+    range: '6h' | '12h' | '24h' | '3d'
+    label: string
+    timezone: 'Asia/Seoul'
+    bucket_hours: number
+    start: string
+    end: string
+    totals: AdminMetricSummary
+    series: AdminStatsPoint[]
+  }
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export class ApiError extends Error {
@@ -71,6 +104,12 @@ export async function api<T>(path: string, options: RequestInit = {}, token?: st
     throw new ApiError(response.status, body.detail ?? '요청을 처리하지 못했습니다.')
   }
   return response.json()
+}
+
+export function getAdminStats(adminKey: string, range: AdminStats['period']['range']) {
+  return api<AdminStats>(`/api/admin/stats?range=${range}`, {
+    headers: { 'X-Admin-Key': adminKey },
+  })
 }
 
 export function getAnonymousSessionId() {
