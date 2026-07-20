@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bike, Car, Footprints, Sparkles, TrainFront } from 'lucide-react'
+import { Car, Footprints, Sparkles, TrainFront } from 'lucide-react'
 import { api } from '../lib/api'
 import { Button, Field, Notice } from './UI'
 
@@ -20,13 +20,9 @@ export function Conditions({
   onSelected: () => void
 }) {
   const [form, setForm] = useState({
-    transport_mode: 'walk',
     max_travel_minutes: 30,
-    budget_per_person: 30000,
-    party_size: 2,
     preferred_categories: [] as string[],
     indoor_outdoor: 'any',
-    excluded: '',
     includes_food: true,
     total_available_minutes: 180,
   })
@@ -50,10 +46,7 @@ export function Conditions({
           method: 'POST',
           body: JSON.stringify({
             ...form,
-            excluded_activities: form.excluded
-              .split(',')
-              .map((x) => x.trim())
-              .filter(Boolean),
+            transport_mode: 'walk',
           }),
         },
         token,
@@ -76,28 +69,31 @@ export function Conditions({
           <p className="page-subtitle">위치와 이동 시간만 정해도 시작할 수 있어요.</p>
         </div>
       </div>
-      <Field label="이동 수단">
+      <div className="field">
+        <span className="field__label">이동 수단</span>
         <div className="segmented">
           {[
-            ['walk', '도보', Footprints],
-            ['transit', '대중교통', TrainFront],
-            ['car', '자동차', Car],
-          ].map(([value, label, Icon]) => {
-            const C = Icon as typeof Bike
+            ['walk', '도보', Footprints, false],
+            ['transit', '대중교통', TrainFront, true],
+            ['car', '자동차', Car, true],
+          ].map(([value, label, Icon, disabled]) => {
+            const C = Icon as typeof Footprints
             return (
               <button
                 type="button"
                 key={value as string}
-                className={form.transport_mode === value ? 'active' : ''}
-                onClick={() => setForm({ ...form, transport_mode: value as string })}
+                className={value === 'walk' ? 'active' : ''}
+                disabled={disabled as boolean}
               >
                 <C size={19} />
-                {label as string}
+                <span>{label as string}</span>
+                {disabled ? <small>준비 중</small> : null}
               </button>
             )
           })}
         </div>
-      </Field>
+        <small>대중교통과 자동차는 아직 구현되지 않았어요.</small>
+      </div>
       <Field label={`최대 이동 시간 · ${form.max_travel_minutes}분`}>
         <input
           type="range"
@@ -112,28 +108,6 @@ export function Conditions({
           <span>90분</span>
         </div>
       </Field>
-      <div className="two-columns">
-        <Field label="1인 예산">
-          <select
-            value={form.budget_per_person}
-            onChange={(e) => setForm({ ...form, budget_per_person: Number(e.target.value) })}
-          >
-            <option value="15000">1.5만원 이하</option>
-            <option value="30000">3만원 이하</option>
-            <option value="60000">6만원 이하</option>
-            <option value="100000">상관없어요</option>
-          </select>
-        </Field>
-        <Field label="참가 인원">
-          <input
-            type="number"
-            min="1"
-            max="20"
-            value={form.party_size}
-            onChange={(e) => setForm({ ...form, party_size: Number(e.target.value) })}
-          />
-        </Field>
-      </div>
       <Field label="오늘 끌리는 것" hint="여러 개 선택할 수 있어요">
         <div className="choice-grid">
           {categories.map((item) => (
@@ -165,14 +139,6 @@ export function Conditions({
             </button>
           ))}
         </div>
-      </Field>
-      <Field label="피하고 싶은 활동" hint="쉼표로 구분해 주세요">
-        <input
-          value={form.excluded}
-          onChange={(e) => setForm({ ...form, excluded: e.target.value })}
-          placeholder="예: 매운 음식, 높은 곳"
-          maxLength={120}
-        />
       </Field>
       {error && <Notice tone="warning">{error}</Notice>}
       <Button type="submit" loading={loading}>
