@@ -189,8 +189,8 @@ function measureMetricViewport(
   const eastPoint = projection.pointFromCoords(new maps.LatLng(east.latitude, east.longitude))
   const northPoint = projection.pointFromCoords(new maps.LatLng(north.latitude, north.longitude))
   return {
-    width: Math.max(1, Math.abs(eastPoint.getX() - centerPoint.getX())),
-    height: Math.max(1, Math.abs(northPoint.getY() - centerPoint.getY())),
+    width: Math.max(1, Math.abs(eastPoint.x - centerPoint.x)),
+    height: Math.max(1, Math.abs(northPoint.y - centerPoint.y)),
   }
 }
 
