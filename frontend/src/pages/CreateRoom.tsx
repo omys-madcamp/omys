@@ -17,7 +17,7 @@ export default function CreateRoom() {
     lat: 37.5665,
     lng: 126.978,
     redraw: true,
-    hideUntilArrival: true,
+    hideUntilArrival: mode === 'omys',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -234,14 +234,18 @@ export default function CreateRoom() {
             />
           </label>
         )}
-        {mode === 'omys' && (
+        {(mode === 'omys' || mode === 'friends') && (
           <label className="toggle-card">
             <span className="toggle-card__icon">
               <EyeOff />
             </span>
             <span>
               <b>도착할 때까지 장소 숨기기</b>
-              <small>도착한 뒤에도 공개 버튼을 눌러야 장소가 보여요</small>
+              <small>
+                {mode === 'friends'
+                  ? '숨기면 모두가 비밀 내비로 이동하고 도착 후 선택자를 공개해요'
+                  : '도착한 뒤에도 공개 버튼을 눌러야 장소가 보여요'}
+              </small>
             </span>
             <input
               type="checkbox"

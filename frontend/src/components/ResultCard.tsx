@@ -5,7 +5,10 @@ import { formatDistance, formatVerified, track, type Room } from '../lib/api'
 
 export function ResultCard({ room }: { room: Room }) {
   const place = room.selected_place!
-  const shareText = `오늘 ${room.participants.length}명이 OMYS 미스터리 스팟에 도전했습니다. 우리의 목적지는 ${place.name}!`
+  const selectionLabel = room.selected_by_nickname
+    ? `${room.selected_by_nickname}의 선택 미스터리 스팟`
+    : '미스터리 봉인 해제'
+  const shareText = `오늘 ${room.participants.length}명이 OMYS 미스터리 스팟에 도전했습니다. ${selectionLabel}, 목적지는 ${place.name}!`
   const shareUrl = `${location.origin}/share/${room.invite_code}`
   const copy = async () => {
     await navigator.clipboard.writeText(shareUrl)
@@ -33,7 +36,7 @@ export function ResultCard({ room }: { room: Room }) {
           <span>
             <PartyPopper />
           </span>
-          <small>미스터리 봉인 해제</small>
+          <small>{selectionLabel}</small>
           <h1>
             오늘의 스팟을
             <br />
@@ -49,7 +52,13 @@ export function ResultCard({ room }: { room: Room }) {
           <p>{place.address}</p>
           <div className="place-reveal__meta">
             <span>{formatDistance(place.distance_meters)}</span>
-            <span>{room.mode === 'friends' ? '친구 추천' : 'OMYS 추천'}</span>
+            <span>
+              {room.selected_by_nickname
+                ? `${room.selected_by_nickname} 추천`
+                : room.mode === 'friends'
+                  ? '친구 추천'
+                  : 'OMYS 추천'}
+            </span>
             <span>{room.participants.length}명</span>
           </div>
         </div>

@@ -82,6 +82,25 @@ describe('CreateRoom departure location', () => {
       latitude: 37.54458,
       longitude: 127.05596,
     })
+    expect(body.hide_until_arrival).toBe(false)
+  })
+
+  it('친구 모드에서도 도착 전 장소 숨기기를 선택할 수 있다', async () => {
+    const user = userEvent.setup()
+    renderPage('friends')
+
+    await user.click(screen.getByLabelText('출발 위치'))
+    await user.click(screen.getByRole('button', { name: /이곳이 맞아요/ }))
+    await user.type(screen.getByLabelText('내 닉네임'), '방장')
+
+    const hideOption = screen.getByRole('checkbox', { name: /도착할 때까지 장소 숨기기/ })
+    expect(hideOption).not.toBeChecked()
+    await user.click(hideOption)
+    await user.click(screen.getByRole('button', { name: /초대 방 만들기/ }))
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+    const [, options] = vi.mocked(fetch).mock.calls[0]
+    expect(JSON.parse(String(options?.body)).hide_until_arrival).toBe(true)
   })
 
   it('OMYS 모드에서 도착 전 숨김 여부를 STEP 1에서 저장한다', async () => {

@@ -1,7 +1,10 @@
 from conftest import auth
+from app.database import SessionLocal
+from app.models import PlaceCandidate, Room
+from sqlalchemy import select
 
 
-def create_room(client):
+def create_room(client, hide_until_arrival=False):
     response = client.post(
         "/api/rooms",
         json={
@@ -10,6 +13,7 @@ def create_room(client):
             "host_nickname": "방장",
             "departure": {"label": "서울시청", "latitude": 37.5665, "longitude": 126.9780},
             "redraw_allowed": True,
+            "hide_until_arrival": hide_until_arrival,
         },
     )
     assert response.status_code == 201
@@ -113,3 +117,53 @@ def test_closed_place_is_never_selected(client):
     response = client.post(f"/api/rooms/{code}/draw", headers=auth(host["participant_token"]))
     assert response.status_code == 422
     assert "찾지 못했습니다" in response.json()["detail"]
+
+
+def test_hidden_friend_spot_uses_navigation_and_reveals_submitter(client):
+    host = create_room(client, hide_until_arrival=True)
+    code = host["invite_code"]
+    guest = client.post(f"/api/rooms/{code}/join", json={"nickname": "친구"}).json()
+    search = client.get(
+        f"/api/rooms/{code}/places/search",
+        headers=auth(host["participant_token"]),
+    )
+    open_places = [
+        item for item in search.json()["places"] if item["open_now"] or item["is_public_outdoor"]
+    ]
+    submit(client, code, host["participant_token"], open_places[0])
+    submit(client, code, guest["participant_token"], open_places[1])
+
+    draw = client.post(f"/api/rooms/{code}/draw", headers=auth(host["participant_token"]))
+    assert draw.status_code == 200, draw.text
+    views = [
+        client.get(f"/api/rooms/{code}", headers=auth(token)).json()
+        for token in [host["participant_token"], guest["participant_token"]]
+    ]
+    assert all(view["selected_place"] is None for view in views)
+    assert all(view["you_are_guide"] is False for view in views)
+
+    assert (
+        client.post(f"/api/rooms/{code}/start", headers=auth(host["participant_token"])).status_code
+        == 200
+    )
+    with SessionLocal() as db:
+        room = db.scalar(select(Room).where(Room.invite_code == code))
+        place = db.get(PlaceCandidate, room.selected_place_id)
+        target = {"latitude": place.latitude, "longitude": place.longitude, "accuracy": 20}
+
+    navigation = client.post(
+        f"/api/rooms/{code}/navigation",
+        headers=auth(guest["participant_token"]),
+        json=target,
+    )
+    assert navigation.status_code == 200
+    assert navigation.json()["reveal_available"] is True
+
+    reveal = client.post(
+        f"/api/rooms/{code}/reveal",
+        headers=auth(guest["participant_token"]),
+        json=target,
+    )
+    assert reveal.status_code == 200, reveal.text
+    assert reveal.json()["selected_place"]["name"]
+    assert reveal.json()["selected_by_nickname"] in {"방장", "친구"}

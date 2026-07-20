@@ -35,6 +35,7 @@ export type Room = {
   participants: { id: string; nickname: string; is_host: boolean; submission_completed: boolean }[]
   own_candidates: Place[]
   selected_place: Place | null
+  selected_by_nickname?: string | null
   opening_verified_at?: string | null
   started_at?: string | null
   revealed_at?: string | null

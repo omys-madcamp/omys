@@ -99,7 +99,7 @@ export default function RoomPage() {
         <ResultCard room={room} />
       </Shell>
     )
-  if (room.status === 'navigating' && room.mode === 'omys')
+  if (room.status === 'navigating' && (room.mode === 'omys' || room.hide_until_arrival))
     return (
       <Shell>
         <MysteryNavigation
@@ -265,9 +265,19 @@ export default function RoomPage() {
             </div>
           ) : (
             <p>
-              당첨 장소를 낸 친구만 목적지를 확인했어요.
-              <br />
-              가이드를 잘 따라가 주세요!
+              {room.mode === 'friends' && room.hide_until_arrival ? (
+                <>
+                  당첨 장소는 모든 친구에게 숨겨져 있어요.
+                  <br />
+                  출발하면 비밀 내비가 길을 알려드려요!
+                </>
+              ) : (
+                <>
+                  당첨 장소를 낸 친구만 목적지를 확인했어요.
+                  <br />
+                  가이드를 잘 따라가 주세요!
+                </>
+              )}
             </p>
           )}
           <div className="locked-actions">
@@ -296,7 +306,7 @@ export default function RoomPage() {
           </div>
         </section>
       )}
-      {room.status === 'navigating' && room.mode === 'friends' && (
+      {room.status === 'navigating' && room.mode === 'friends' && !room.hide_until_arrival && (
         <section className="follow-guide">
           <span className="follow-guide__icon">
             <Navigation />

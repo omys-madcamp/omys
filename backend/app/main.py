@@ -258,7 +258,16 @@ def serialize_room(room: Room, participant: Participant) -> dict:
         (item for item in room.candidates if item.id == room.selected_place_id), None
     )
     revealed = room.status == "revealed"
-    guide = bool(db_place and db_place.participant_id == participant.id and room.mode == "friends")
+    guide = bool(
+        db_place
+        and db_place.participant_id == participant.id
+        and room.mode == "friends"
+        and not room.hide_until_arrival
+    )
+    selected_by = next(
+        (item for item in room.participants if db_place and item.id == db_place.participant_id),
+        None,
+    )
     can_see_place = revealed or guide
     own_candidates = [place_payload(item) for item in participant.candidates]
     return {
@@ -292,6 +301,9 @@ def serialize_room(room: Room, participant: Participant) -> dict:
         "you_are_guide": guide,
         "selected_place": place_payload(db_place, room.departure_latitude, room.departure_longitude)
         if can_see_place and db_place
+        else None,
+        "selected_by_nickname": selected_by.nickname
+        if revealed and room.mode == "friends" and selected_by
         else None,
         "opening_verified_at": db_place.last_verified_at if db_place else None,
         "started_at": room.started_at,
