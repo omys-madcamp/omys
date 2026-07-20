@@ -196,7 +196,13 @@ def place_matches_category(place: PlaceResult, category: str | None) -> bool:
 class PlacesProvider(ABC):
     @abstractmethod
     async def search(
-        self, query: str, latitude: float, longitude: float, category: str | None = None
+        self,
+        query: str,
+        latitude: float,
+        longitude: float,
+        category: str | None = None,
+        radius: int | None = None,
+        page_count: int = 1,
     ) -> list[PlaceResult]: ...
 
     @abstractmethod
@@ -294,7 +300,13 @@ class MockPlacesProvider(PlacesProvider):
         ]
 
     async def search(
-        self, query: str, latitude: float, longitude: float, category: str | None = None
+        self,
+        query: str,
+        latitude: float,
+        longitude: float,
+        category: str | None = None,
+        radius: int | None = None,
+        page_count: int = 1,
     ) -> list[PlaceResult]:
         query_lower = query.strip().lower()
         matches = [
@@ -307,6 +319,10 @@ class MockPlacesProvider(PlacesProvider):
             )
             for place in self.places
             if (not category or category == "완전 랜덤" or place.category == category)
+            and (
+                radius is None
+                or distance_meters(latitude, longitude, place.latitude, place.longitude) <= radius
+            )
             and (
                 not query_lower
                 or query_lower in place.name.lower()
@@ -324,8 +340,10 @@ class MockPlacesProvider(PlacesProvider):
                 )
                 for place in self.places
                 if not category or category == "완전 랜덤" or place.category == category
+                if radius is None
+                or distance_meters(latitude, longitude, place.latitude, place.longitude) <= radius
             ]
-        return sorted(matches, key=lambda place: place.distance_meters or 0)[:12]
+        return sorted(matches, key=lambda place: place.distance_meters or 0)[: 12 * page_count]
 
     async def verify(self, external_place_id: str) -> PlaceResult | None:
         await asyncio.sleep(0)
@@ -377,7 +395,13 @@ class GooglePlacesProvider(PlacesProvider):
         )
 
     async def search(
-        self, query: str, latitude: float, longitude: float, category: str | None = None
+        self,
+        query: str,
+        latitude: float,
+        longitude: float,
+        category: str | None = None,
+        radius: int | None = None,
+        page_count: int = 1,
     ) -> list[PlaceResult]:
         text_query = query.strip() or CATEGORY_QUERY.get(category or "완전 랜덤", "가볼만한 곳")
         fields = "places.id,places.displayName,places.primaryTypeDisplayName,places.formattedAddress,places.location,places.priceLevel,places.businessStatus,places.currentOpeningHours,places.googleMapsUri,places.nationalPhoneNumber"
@@ -389,10 +413,10 @@ class GooglePlacesProvider(PlacesProvider):
                 "locationBias": {
                     "circle": {
                         "center": {"latitude": latitude, "longitude": longitude},
-                        "radius": 10000.0,
+                        "radius": float(min(radius or 10_000, 50_000)),
                     }
                 },
-                "maxResultCount": 12,
+                "maxResultCount": min(20, 12 * page_count),
                 "languageCode": "ko",
             },
         )
@@ -499,28 +523,49 @@ class KakaoPlacesProvider(PlacesProvider):
         latitude: float,
         longitude: float,
         radius: int = 10_000,
+        page_count: int = 1,
     ) -> list[PlaceResult]:
-        response = await self.client.get(
-            self.base_url,
-            params={
-                "query": query,
-                "x": longitude,
-                "y": latitude,
-                "radius": radius,
-                "size": 15,
-                "sort": "distance",
-            },
-        )
-        response.raise_for_status()
-        return [
-            self._parse(item, latitude, longitude) for item in response.json().get("documents", [])
-        ]
+        results: list[PlaceResult] = []
+        for page in range(1, min(max(page_count, 1), 3) + 1):
+            response = await self.client.get(
+                self.base_url,
+                params={
+                    "query": query,
+                    "x": longitude,
+                    "y": latitude,
+                    "radius": min(max(radius, 1), 20_000),
+                    "size": 15,
+                    "page": page,
+                    "sort": "distance",
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+            results.extend(
+                self._parse(item, latitude, longitude)
+                for item in payload.get("documents", [])
+            )
+            if payload.get("meta", {}).get("is_end", True):
+                break
+        return results
 
     async def search(
-        self, query: str, latitude: float, longitude: float, category: str | None = None
+        self,
+        query: str,
+        latitude: float,
+        longitude: float,
+        category: str | None = None,
+        radius: int | None = None,
+        page_count: int = 1,
     ) -> list[PlaceResult]:
         text_query = query.strip() or CATEGORY_QUERY.get(category or "완전 랜덤", "가볼만한 곳")
-        return await self._keyword_search(text_query, latitude, longitude)
+        return await self._keyword_search(
+            text_query,
+            latitude,
+            longitude,
+            radius=radius or 10_000,
+            page_count=page_count,
+        )
 
     async def verify(self, external_place_id: str) -> PlaceResult | None:
         decoded = self._decode_external_id(external_place_id)
@@ -552,13 +597,32 @@ class CachedPlacesProvider(PlacesProvider):
         self.cache: dict[str, tuple[float, list[PlaceResult]]] = {}
 
     async def search(
-        self, query: str, latitude: float, longitude: float, category: str | None = None
+        self,
+        query: str,
+        latitude: float,
+        longitude: float,
+        category: str | None = None,
+        radius: int | None = None,
+        page_count: int = 1,
     ) -> list[PlaceResult]:
-        key = f"{query}:{round(latitude, 3)}:{round(longitude, 3)}:{category}"
+        key = (
+            f"{query}:{round(latitude, 3)}:{round(longitude, 3)}:"
+            f"{category}:{radius}:{page_count}"
+        )
         cached = self.cache.get(key)
         if cached and cached[0] > time.monotonic():
             return cached[1]
-        result = await self.provider.search(query, latitude, longitude, category)
+        if radius is None and page_count == 1:
+            result = await self.provider.search(query, latitude, longitude, category)
+        else:
+            result = await self.provider.search(
+                query,
+                latitude,
+                longitude,
+                category,
+                radius=radius,
+                page_count=page_count,
+            )
         if category in CATEGORY_MATCH_TERMS:
             result = [place for place in result if place_matches_category(place, category)]
         self.cache[key] = (time.monotonic() + self.ttl, result)

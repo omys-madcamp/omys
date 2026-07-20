@@ -50,6 +50,33 @@ describe('Conditions', () => {
     expect(body).not.toHaveProperty('budget_per_person')
     expect(body).not.toHaveProperty('party_size')
     expect(body).not.toHaveProperty('excluded_activities')
+    expect(body).not.toHaveProperty('total_available_minutes')
     expect(onSelected).toHaveBeenCalledOnce()
+  })
+
+  it('후보가 없으면 조건을 완화하라는 안내를 표시한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detail:
+                '조건에 맞는 비밀 스팟을 찾지 못했습니다. 최대 이동 시간을 늘리거나 카테고리·공간 선호 같은 조건을 조금 완화해 주세요.',
+            }),
+            {
+              status: 422,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    render(<Conditions code="ROOM123" token="participant-token" onSelected={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: /비밀 스팟 뽑기/ }))
+
+    expect(await screen.findByText(/조건을 조금 완화해 주세요/)).toBeInTheDocument()
   })
 })

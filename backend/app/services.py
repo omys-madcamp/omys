@@ -16,7 +16,10 @@ from .places import PlacesProvider
 from .schemas import PlaceResult
 
 
-NO_CANDIDATE_MESSAGE = "현재 조건에 맞으면서 영업 중인 장소를 찾지 못했습니다. 이동 시간, 예산 또는 제외 조건을 조금 넓혀 주세요."
+NO_CANDIDATE_MESSAGE = (
+    "조건에 맞는 비밀 스팟을 찾지 못했습니다. 최대 이동 시간을 늘리거나 "
+    "카테고리·공간 선호 같은 조건을 조금 완화해 주세요."
+)
 
 
 def _coordinates_from_kakao_directions(payload: dict) -> list[Coordinate]:

@@ -1,4 +1,4 @@
-from math import asin, cos, radians, sin, sqrt
+from math import asin, ceil, cos, radians, sin, sqrt
 
 
 Coordinate = tuple[float, float]
@@ -67,6 +67,12 @@ def slice_path_ahead(
 
 
 SPEED_KMH = {"walk": 4.2, "transit": 18.0, "car": 24.0}
+
+
+def travel_distance_meters(minutes: int, mode: str) -> int:
+    """Return the straight-line distance covered by the ETA model."""
+    speed = SPEED_KMH.get(mode, SPEED_KMH["walk"])
+    return ceil(speed * 1000 * minutes / 60)
 
 
 def travel_minutes(distance: float, mode: str) -> int:

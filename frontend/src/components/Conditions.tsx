@@ -24,7 +24,6 @@ export function Conditions({
     preferred_categories: [] as string[],
     indoor_outdoor: 'any',
     includes_food: true,
-    total_available_minutes: 180,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -53,7 +52,11 @@ export function Conditions({
       )
       onSelected()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '조건에 맞는 장소를 찾지 못했어요.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : '비밀 스팟을 찾지 못했어요. 이동 시간이나 선택 조건을 조금 완화해 주세요.',
+      )
     } finally {
       setLoading(false)
     }

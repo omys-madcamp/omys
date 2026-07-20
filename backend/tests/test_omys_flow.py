@@ -93,6 +93,38 @@ def test_no_candidate_has_actionable_message(client):
     assert "이동 시간" in response.json()["detail"]
 
 
+def test_conditions_can_be_relaxed_and_retried_after_no_candidate(client):
+    host = create_omys(client)
+    path = f"/api/rooms/{host['invite_code']}/conditions"
+    headers = auth(host["participant_token"])
+
+    narrow = client.post(
+        path,
+        headers=headers,
+        json={
+            "transport_mode": "walk",
+            "max_travel_minutes": 5,
+            "party_size": 2,
+            "preferred_categories": ["게임·실내 놀거리"],
+        },
+    )
+    assert narrow.status_code == 422
+
+    relaxed = client.post(
+        path,
+        headers=headers,
+        json={
+            "transport_mode": "walk",
+            "max_travel_minutes": 90,
+            "party_size": 2,
+            "preferred_categories": ["게임·실내 놀거리"],
+        },
+    )
+
+    assert relaxed.status_code == 200, relaxed.text
+    assert relaxed.json()["selection_locked"] is True
+
+
 def test_conditions_reject_unsupported_category(client):
     host = create_omys(client)
     response = client.post(

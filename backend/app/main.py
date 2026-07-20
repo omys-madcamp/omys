@@ -22,6 +22,7 @@ from .geo import (
     distance_meters,
     navigation_hint,
     slice_path_ahead,
+    travel_distance_meters,
     travel_minutes,
 )
 from .models import (
@@ -611,24 +612,32 @@ async def set_conditions(
     unsupported_categories = set(payload.preferred_categories) - set(CATEGORIES)
     if unsupported_categories:
         raise HTTPException(422, "지원하지 않는 카테고리가 포함되어 있습니다.")
-    condition = OmysCondition(
-        room_id=room.id,
-        latitude=room.departure_latitude,
-        longitude=room.departure_longitude,
-        transport_mode=payload.transport_mode,
-        max_travel_minutes=payload.max_travel_minutes,
-        budget_per_person=payload.budget_per_person,
-        party_size=payload.party_size,
-        preferred_categories=payload.preferred_categories,
-        indoor_outdoor=payload.indoor_outdoor,
-        excluded_activities=[clean_text(item) for item in payload.excluded_activities],
-        includes_food=payload.includes_food,
-        accessibility=clean_text(payload.accessibility) if payload.accessibility else None,
-        total_available_minutes=payload.total_available_minutes,
-    )
-    room.condition = condition
+    condition_values = {
+        "latitude": room.departure_latitude,
+        "longitude": room.departure_longitude,
+        "transport_mode": payload.transport_mode,
+        "max_travel_minutes": payload.max_travel_minutes,
+        "budget_per_person": payload.budget_per_person,
+        "party_size": payload.party_size,
+        "preferred_categories": payload.preferred_categories,
+        "indoor_outdoor": payload.indoor_outdoor,
+        "excluded_activities": [clean_text(item) for item in payload.excluded_activities],
+        "includes_food": payload.includes_food,
+        "accessibility": clean_text(payload.accessibility) if payload.accessibility else None,
+        "total_available_minutes": payload.total_available_minutes,
+    }
+    if room.condition:
+        condition = room.condition
+        for field, value in condition_values.items():
+            setattr(condition, field, value)
+    else:
+        condition = OmysCondition(room_id=room.id, **condition_values)
+        room.condition = condition
     db.flush()
     categories_to_search = payload.preferred_categories or CATEGORIES
+    search_radius = travel_distance_meters(
+        payload.max_travel_minutes, payload.transport_mode
+    )
     search_tasks = [
         asyncio.create_task(
             places_provider.search(
@@ -636,6 +645,8 @@ async def set_conditions(
                 room.departure_latitude,
                 room.departure_longitude,
                 category,
+                radius=search_radius,
+                page_count=3,
             )
         )
         for category in categories_to_search[:5]
