@@ -13,7 +13,12 @@ ALPHABET = string.ascii_uppercase + string.digits
 
 
 def invite_code() -> str:
-    return "".join(secrets.choice(ALPHABET) for _ in range(12))
+    while True:
+        code = "".join(secrets.choice(ALPHABET) for _ in range(6))
+        if any(character.isalpha() for character in code) and any(
+            character.isdigit() for character in code
+        ):
+            return code
 
 
 def participant_token() -> str:

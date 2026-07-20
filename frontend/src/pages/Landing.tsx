@@ -1,13 +1,34 @@
-import { BookOpen, ChevronDown, LockKeyhole, Map, Sparkles, Zap } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { BookOpen, ChevronDown, DoorOpen, LockKeyhole, Map, Sparkles, X, Zap } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Logo, Shell } from '../components/UI'
 import { track } from '../lib/api'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function Landing() {
+  const navigate = useNavigate()
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [roomCode, setRoomCode] = useState('')
+
   useEffect(() => {
     track('landing_view')
   }, [])
+
+  useEffect(() => {
+    if (!joinOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setJoinOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [joinOpen])
+
+  const joinRoom = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (roomCode.length !== 6) return
+    track('room_code_entered')
+    navigate(`/join/${roomCode}`)
+  }
+
   return (
     <Shell wide>
       <section className="hero">
@@ -41,6 +62,9 @@ export default function Landing() {
               OMYS가 골라주기
             </Link>
           </div>
+          <button className="landing-join-trigger" type="button" onClick={() => setJoinOpen(true)}>
+            <DoorOpen size={17} /> 이미 방이 있나요? <strong>방 코드로 입장하기</strong>
+          </button>
         </div>
         <div className="mystery-visual" aria-hidden="true">
           <div className="orbit orbit--one" />
@@ -130,6 +154,67 @@ export default function Landing() {
         </div>
       </details>
       <p className="landing-foot">회원가입 없이 · 링크 하나로 · 바로 출발</p>
+      {joinOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setJoinOpen(false)
+          }}
+        >
+          <section
+            className="room-code-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="room-code-modal-title"
+          >
+            <button
+              className="room-code-modal__close"
+              type="button"
+              aria-label="닫기"
+              onClick={() => setJoinOpen(false)}
+            >
+              <X size={20} />
+            </button>
+            <span className="room-code-modal__icon">
+              <DoorOpen />
+            </span>
+            <h2 id="room-code-modal-title">방 코드로 입장하기</h2>
+            <p>친구에게 받은 코드를 입력해 주세요.</p>
+            <form onSubmit={joinRoom}>
+              <label htmlFor="landing-room-code">방 코드</label>
+              <input
+                id="landing-room-code"
+                autoFocus
+                autoComplete="off"
+                autoCapitalize="characters"
+                inputMode="text"
+                value={roomCode}
+                onChange={(event) =>
+                  setRoomCode(
+                    event.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, '')
+                      .slice(0, 6),
+                  )
+                }
+                placeholder="ABC123"
+                maxLength={6}
+                pattern="[A-Z0-9]{6}"
+                aria-describedby="landing-room-code-hint"
+                required
+              />
+              <small id="landing-room-code-hint">영문·숫자 6자리</small>
+              <button
+                className="button button--primary"
+                type="submit"
+                disabled={roomCode.length !== 6}
+              >
+                입장하기
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
     </Shell>
   )
 }

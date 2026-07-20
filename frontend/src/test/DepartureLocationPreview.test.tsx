@@ -1,10 +1,15 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 
 import { DepartureLocationPreview } from '../components/DepartureLocationPreview'
-import { clipRouteToBounds, shouldShowDestination } from '../components/MysteryNavigation'
+import {
+  clipRouteToBounds,
+  MysteryNavigation,
+  selectMetricViewport,
+  shouldShowDestination,
+} from '../components/MysteryNavigation'
 import { loadKakaoMaps, type KakaoLocation } from '../lib/kakao'
 
 vi.mock('../lib/kakao', () => ({
@@ -107,6 +112,8 @@ describe('DepartureLocationPreview map selection', () => {
 })
 
 describe('MysteryNavigation map geometry', () => {
+  afterEach(() => cleanup())
+
   class LatLng {
     constructor(
       private latitude: number,
@@ -150,5 +157,55 @@ describe('MysteryNavigation map geometry', () => {
     expect(shouldShowDestination(false, 100, true)).toBe(true)
     expect(shouldShowDestination(true, 149, true)).toBe(true)
     expect(shouldShowDestination(true, 150, true)).toBe(false)
+  })
+
+  it('selects the most detailed 300m viewport that fits a narrow mobile screen', () => {
+    const candidates = [
+      { level: 1, width: 620, height: 610 },
+      { level: 2, width: 310, height: 305 },
+      { level: 3, width: 155, height: 153 },
+    ]
+
+    expect(selectMetricViewport(candidates, 360, 280)).toEqual(candidates[2])
+    expect(selectMetricViewport(candidates, 390, 330)).toEqual(candidates[1])
+  })
+
+  it('submits the development admin key to reveal the destination', async () => {
+    const user = userEvent.setup()
+    const onReveal = vi.fn()
+    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ status: 'revealed' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        watchPosition: vi.fn(() => 1),
+        clearWatch: vi.fn(),
+      },
+    })
+    vi.mocked(loadKakaoMaps).mockReturnValue(null)
+
+    render(
+      <MysteryNavigation
+        code="ROOM123"
+        token="participant-token"
+        isHost={false}
+        hideUntilArrival
+        onReveal={onReveal}
+      />,
+    )
+    await user.click(screen.getByText('테스트용 목적지 확인'))
+    await user.type(screen.getByLabelText('관리자 키'), '1210')
+    await user.click(screen.getByRole('button', { name: '목적지 보기' }))
+
+    await waitFor(() => expect(onReveal).toHaveBeenCalledOnce())
+    const [, options] = fetchMock.mock.calls[0]
+    expect(JSON.parse(String(options?.body))).toEqual({ admin_key: '1210' })
   })
 })

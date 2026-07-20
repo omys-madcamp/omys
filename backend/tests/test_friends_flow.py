@@ -13,7 +13,12 @@ def create_room(client):
         },
     )
     assert response.status_code == 201
-    return response.json()
+    room = response.json()
+    assert len(room["invite_code"]) == 6
+    assert room["invite_code"].isalnum()
+    assert any(character.isalpha() for character in room["invite_code"])
+    assert any(character.isdigit() for character in room["invite_code"])
+    return room
 
 
 def submit(client, code, token, place):

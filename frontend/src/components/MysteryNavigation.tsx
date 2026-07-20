@@ -34,6 +34,12 @@ type Segment = {
   end: Coordinate
 }
 
+type MetricViewport = {
+  level: number
+  width: number
+  height: number
+}
+
 const VIEWPORT_METERS = 300
 const DESTINATION_SHOW_METERS = 100
 const DESTINATION_HIDE_METERS = 150
@@ -157,12 +163,24 @@ export function shouldShowDestination(
     : remainingMeters <= DESTINATION_SHOW_METERS
 }
 
-function resizeToMetricViewport(
-  frame: HTMLDivElement,
+export function selectMetricViewport(
+  candidates: MetricViewport[],
+  maxWidth: number,
+  maxHeight: number,
+): MetricViewport {
+  const fallback = candidates.at(-1)
+  if (!fallback) throw new Error('지도 뷰포트 후보가 필요합니다.')
+  return (
+    candidates.find((candidate) => candidate.width <= maxWidth && candidate.height <= maxHeight) ??
+    fallback
+  )
+}
+
+function measureMetricViewport(
   map: KakaoMap,
   maps: KakaoMaps,
   center: Coordinate,
-) {
+): Omit<MetricViewport, 'level'> {
   const centerPosition = new maps.LatLng(center.latitude, center.longitude)
   const east = destinationPoint(center, 90, VIEWPORT_METERS)
   const north = destinationPoint(center, 0, VIEWPORT_METERS)
@@ -170,11 +188,43 @@ function resizeToMetricViewport(
   const centerPoint = projection.pointFromCoords(centerPosition)
   const eastPoint = projection.pointFromCoords(new maps.LatLng(east.latitude, east.longitude))
   const northPoint = projection.pointFromCoords(new maps.LatLng(north.latitude, north.longitude))
-  const width = Math.max(1, Math.abs(eastPoint.getX() - centerPoint.getX()))
-  const height = Math.max(1, Math.abs(northPoint.getY() - centerPoint.getY()))
+  return {
+    width: Math.max(1, Math.abs(eastPoint.getX() - centerPoint.getX())),
+    height: Math.max(1, Math.abs(northPoint.getY() - centerPoint.getY())),
+  }
+}
 
-  frame.style.width = `${width}px`
-  frame.style.height = `${height}px`
+function resizeToMetricViewport(
+  frame: HTMLDivElement,
+  map: KakaoMap,
+  maps: KakaoMaps,
+  center: Coordinate,
+  adaptLevel: boolean,
+) {
+  const centerPosition = new maps.LatLng(center.latitude, center.longitude)
+  const pageWidth = document.documentElement.clientWidth || window.innerWidth
+  const parentWidth = frame.parentElement?.clientWidth || pageWidth
+  const viewportHeight = window.visualViewport?.height || window.innerHeight
+  const maxWidth = Math.max(160, Math.min(pageWidth, parentWidth) - 8)
+  const maxHeight = Math.max(160, Math.min(maxWidth, viewportHeight * 0.48))
+  let viewport: MetricViewport
+
+  if (adaptLevel) {
+    const candidates: MetricViewport[] = []
+    for (let level = 1; level <= 14; level += 1) {
+      map.setLevel(level)
+      candidates.push({ level, ...measureMetricViewport(map, maps, center) })
+      const candidate = candidates.at(-1)
+      if (candidate && candidate.width <= maxWidth && candidate.height <= maxHeight) break
+    }
+    viewport = selectMetricViewport(candidates, maxWidth, maxHeight)
+    map.setLevel(viewport.level)
+  } else {
+    viewport = { level: map.getLevel(), ...measureMetricViewport(map, maps, center) }
+  }
+
+  frame.style.width = `${viewport.width}px`
+  frame.style.height = `${viewport.height}px`
   map.relayout()
   map.setCenter(centerPosition)
 }
@@ -226,6 +276,7 @@ export function MysteryNavigation({
   const [position, setPosition] = useState<GeolocationPosition | null>(null)
   const [geoError, setGeoError] = useState('')
   const [revealing, setRevealing] = useState(false)
+  const [adminKey, setAdminKey] = useState('')
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -343,14 +394,18 @@ export function MysteryNavigation({
       const resize = () => {
         const currentCoordinate = currentCoordinateRef.current
         if (!mapFrame.current || !currentCoordinate) return
-        resizeToMetricViewport(mapFrame.current, map, mapsSdk, currentCoordinate)
+        resizeToMetricViewport(mapFrame.current, map, mapsSdk, currentCoordinate, true)
         redraw()
       }
       mapsSdk.event.addListener(map, 'idle', redraw)
       window.addEventListener('resize', resize)
+      window.addEventListener('orientationchange', resize)
+      window.visualViewport?.addEventListener('resize', resize)
       disposeMapRef.current = () => {
         mapsSdk.event.removeListener(map, 'idle', redraw)
         window.removeEventListener('resize', resize)
+        window.removeEventListener('orientationchange', resize)
+        window.visualViewport?.removeEventListener('resize', resize)
         currentMarker.setMap(null)
         destinationMarker.setMap(null)
         routeShadow.setMap(null)
@@ -358,14 +413,14 @@ export function MysteryNavigation({
         mapRef.current = null
         mapsRef.current = null
       }
-      resizeToMetricViewport(mapFrame.current, map, mapsSdk, coordinate)
+      resizeToMetricViewport(mapFrame.current, map, mapsSdk, coordinate, true)
       setMapReady(true)
       redraw()
       return
     }
 
     currentMarkerRef.current?.setPosition(center)
-    resizeToMetricViewport(mapFrame.current, mapRef.current, mapsSdk, coordinate)
+    resizeToMetricViewport(mapFrame.current, mapRef.current, mapsSdk, coordinate, false)
   }, [mapsSdk, position])
 
   useEffect(() => {
@@ -390,7 +445,7 @@ export function MysteryNavigation({
     marker.setVisible(visible)
   }, [nav, hideUntilArrival, mapReady])
 
-  const reveal = async (manual = false) => {
+  const reveal = async (manual = false, testAdminKey?: string) => {
     setRevealing(true)
     try {
       await api(
@@ -398,13 +453,15 @@ export function MysteryNavigation({
         {
           method: 'POST',
           body: JSON.stringify(
-            manual
-              ? { manual_confirm: true }
-              : {
-                  latitude: position?.coords.latitude,
-                  longitude: position?.coords.longitude,
-                  accuracy: position?.coords.accuracy,
-                },
+            testAdminKey
+              ? { admin_key: testAdminKey }
+              : manual
+                ? { manual_confirm: true }
+                : {
+                    latitude: position?.coords.latitude,
+                    longitude: position?.coords.longitude,
+                    accuracy: position?.coords.accuracy,
+                  },
           ),
         },
         token,
@@ -486,6 +543,37 @@ export function MysteryNavigation({
             위치 없이 수동 공개하기
           </button>
         )}
+        <details className="test-admin-reveal">
+          <summary>테스트용 목적지 확인</summary>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void reveal(false, adminKey.trim())
+            }}
+          >
+            <label htmlFor="navigation-admin-key">관리자 키</label>
+            <input
+              id="navigation-admin-key"
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              value={adminKey}
+              onChange={(event) => setAdminKey(event.target.value)}
+              placeholder="키 입력"
+              autoComplete="off"
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={!adminKey.trim()}
+              loading={revealing}
+            >
+              목적지 보기
+            </Button>
+            <small>테스트가 끝나면 임시 키를 제거해 주세요.</small>
+          </form>
+        </details>
       </div>
     </section>
   )

@@ -52,6 +52,8 @@ export type KakaoMap = {
   getCenter: () => KakaoLatLng
   getBounds: () => KakaoLatLngBounds
   getProjection: () => KakaoMapProjection
+  getLevel: () => number
+  setLevel: (level: number) => void
   setDraggable: (draggable: boolean) => void
   setZoomable: (zoomable: boolean) => void
 }

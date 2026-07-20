@@ -1,7 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
+
+afterEach(cleanup)
 
 vi.stubGlobal(
   'fetch',
@@ -32,6 +35,27 @@ describe('OMYS mobile flow', () => {
     expect(screen.queryByText('친구들의 비밀 후보')).not.toBeInTheDocument()
     expect(screen.queryByText('새로고침해도 잠금')).not.toBeInTheDocument()
     expect(screen.queryByText('도착 순간 공개')).not.toBeInTheDocument()
+  })
+
+  it('opens the room-code modal and accepts a six-character alphanumeric code', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /방 코드로 입장하기/ }))
+    expect(screen.getByRole('dialog', { name: '방 코드로 입장하기' })).toBeInTheDocument()
+    const codeInput = screen.getByLabelText('방 코드')
+    await user.type(codeInput, 'ab-12cd3')
+
+    expect(codeInput).toHaveValue('AB12CD')
+    const joinButton = screen.getByRole('button', { name: '입장하기' })
+    expect(joinButton).toBeEnabled()
+    await user.click(joinButton)
+
+    expect(screen.getByText('초대 코드 · AB12CD')).toBeInTheDocument()
   })
 
   it('renders the invite nickname flow without sign-up', () => {
