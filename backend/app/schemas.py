@@ -69,7 +69,6 @@ class RevealRequest(BaseModel):
     longitude: float | None = Field(default=None, ge=-180, le=180)
     accuracy: float | None = Field(default=None, ge=0, le=5000)
     manual_confirm: bool = False
-    admin_key: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class AnalyticsCreate(BaseModel):
@@ -77,19 +76,6 @@ class AnalyticsCreate(BaseModel):
     room_id: str | None = None
     event_name: str = Field(min_length=1, max_length=40)
     metadata: dict = Field(default_factory=dict)
-
-
-class ActivitySessionCreate(BaseModel):
-    anonymous_session_id: str = Field(min_length=8, max_length=64)
-
-
-class ActivityDraw(BaseModel):
-    mood: Literal["light", "funny", "dopamine"]
-
-
-class ActivityComplete(BaseModel):
-    result: Literal["success", "failure", "abandoned"]
-    party_size: int | None = Field(default=None, ge=1, le=50)
 
 
 class PublicShare(BaseModel):
