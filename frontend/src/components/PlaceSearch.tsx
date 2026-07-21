@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Check, MapPin, Search, Store } from 'lucide-react'
 import { api, formatDistance, type Place } from '../lib/api'
-import { searchKakaoPlaces } from '../lib/kakao'
 import { Button, Notice } from './UI'
 
 const CATEGORY_ACTIVITIES = {
@@ -148,15 +147,6 @@ export function PlaceSearch({
     setLoading(true)
     setError('')
     try {
-      const kakaoPlaces = await searchKakaoPlaces(
-        searchQuery,
-        departureLatitude,
-        departureLongitude,
-      )
-      if (kakaoPlaces) {
-        setResults(kakaoPlaces)
-        return
-      }
       const data = await api<{ places: Place[] }>(
         `/api/rooms/${code}/places/search?q=${encodeURIComponent(searchQuery)}&category=${encodeURIComponent(chosenCategory)}`,
         {},
