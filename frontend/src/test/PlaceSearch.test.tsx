@@ -3,9 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PlaceSearch } from '../components/PlaceSearch'
-import { searchKakaoPlaces } from '../lib/kakao'
-
-vi.mock('../lib/kakao', () => ({ searchKakaoPlaces: vi.fn().mockResolvedValue(null) }))
 
 const place = {
   external_place_id: 'mock-cafe',
@@ -67,7 +64,6 @@ describe('PlaceSearch', () => {
     expect(await screen.findByText(place.name)).toBeInTheDocument()
     expect(screen.getByText(/약 820m/)).toBeInTheDocument()
     expect(screen.getByText('서울시청에서 가까운 순')).toBeInTheDocument()
-    expect(searchKakaoPlaces).toHaveBeenCalledWith('보드게임카페', 37.5665, 126.978)
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('q=%EB%B3%B4%EB%93%9C%EA%B2%8C%EC%9E%84%EC%B9%B4%ED%8E%98'),

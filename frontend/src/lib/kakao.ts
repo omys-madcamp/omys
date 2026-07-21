@@ -1,5 +1,3 @@
-import type { Place } from './api'
-
 type KakaoPlace = {
   id: string
   place_name: string
@@ -217,50 +215,3 @@ export async function describeKakaoCoordinates(
   })
 }
 
-export async function searchKakaoPlaces(
-  query: string,
-  latitude: number,
-  longitude: number,
-): Promise<Place[] | null> {
-  const pendingMaps = loadKakaoMaps()
-  if (!pendingMaps) return null
-  const maps = await pendingMaps
-
-  return new Promise((resolve, reject) => {
-    const places = new maps.services.Places()
-    places.keywordSearch(
-      query,
-      (items, status) => {
-        if (status === maps.services.Status.ZERO_RESULT) {
-          resolve([])
-          return
-        }
-        if (status !== maps.services.Status.OK) {
-          reject(new Error('카카오에서 주변 장소를 찾지 못했어요.'))
-          return
-        }
-        resolve(
-          items.map((item) => ({
-            external_place_id: `kakao:${item.id}`,
-            name: item.place_name,
-            category: item.category_name || item.category_group_name || '장소',
-            address: item.road_address_name || item.address_name || '주소 정보 없음',
-            latitude: Number(item.y),
-            longitude: Number(item.x),
-            business_status: 'UNKNOWN_KAKAO',
-            open_now: null,
-            place_url: item.place_url,
-            phone: item.phone || null,
-            distance_meters: item.distance ? Number(item.distance) : undefined,
-          })),
-        )
-      },
-      {
-        location: new maps.LatLng(latitude, longitude),
-        radius: 10_000,
-        size: 15,
-        sort: maps.services.SortBy.DISTANCE,
-      },
-    )
-  })
-}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -14,7 +13,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
-from .activities import ACTIVITIES, ACTIVITY_BY_ID, MOODS, choose_activity
 from .config import get_settings
 from .database import Base, engine, get_db
 from .geo import (
@@ -26,7 +24,6 @@ from .geo import (
     travel_minutes,
 )
 from .models import (
-    ActivitySession,
     AnalyticsEvent,
     OmysCondition,
     Participant,
@@ -34,12 +31,16 @@ from .models import (
     Room,
     Selection,
 )
-from .places import CATEGORIES, CATEGORY_DISCOVERY_QUERIES, places_provider
+from .places import (
+    CATEGORIES,
+    CATEGORY_DISCOVERY_QUERIES,
+    estimate_price_level,
+    is_food_place,
+    is_outdoor_place,
+    places_provider,
+)
 from .schemas import (
     AnalyticsCreate,
-    ActivityComplete,
-    ActivityDraw,
-    ActivitySessionCreate,
     CandidateSubmit,
     ConditionsCreate,
     JoinRequest,
@@ -50,6 +51,7 @@ from .schemas import (
 from .security import (
     clean_text,
     get_participant,
+    hash_token,
     invite_code,
     participant_token,
     require_host,
@@ -80,15 +82,6 @@ EVENTS = {
     "result_shared",
     "redraw_requested",
     "no_candidate_found",
-    "activity_tab_opened",
-    "activity_page_view",
-    "activity_mood_selected",
-    "activity_drawn",
-    "activity_skipped",
-    "activity_started",
-    "activity_completed",
-    "activity_abandoned",
-    "activity_shared",
 }
 
 KST = ZoneInfo("Asia/Seoul")
@@ -98,7 +91,6 @@ STATS_RANGES = {
     "24h": {"label": "최근 24시간", "bucket_hours": 1, "bucket_count": 24},
     "3d": {"label": "최근 3일", "bucket_hours": 6, "bucket_count": 12},
 }
-ACTIVITY_VIEW_EVENTS = {"activity_tab_opened", "activity_page_view"}
 
 
 @asynccontextmanager
@@ -173,89 +165,6 @@ def add_event(
     )
 
 
-def activity_session_by_id(db: Session, session_id: str) -> ActivitySession:
-    session = db.get(ActivitySession, session_id)
-    if not session:
-        raise HTTPException(404, "활동 세션을 찾지 못했어요.")
-    return session
-
-
-def activity_session_payload(session: ActivitySession) -> dict:
-    current = ACTIVITY_BY_ID.get(session.current_activity_id or "")
-
-    def timestamp(value: datetime | None) -> str | None:
-        if not value:
-            return None
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.isoformat()
-
-    return {
-        "id": session.id,
-        "anonymous_session_id": session.anonymous_session_id,
-        "selected_mood": session.selected_mood,
-        "current_activity_id": session.current_activity_id,
-        "previously_drawn_activity_ids": session.previously_drawn_activity_ids or [],
-        "status": session.status,
-        "started_at": timestamp(session.started_at),
-        "completed_at": timestamp(session.completed_at),
-        "result": session.result,
-        "party_size": session.party_size,
-        "activity": current,
-    }
-
-
-def draw_activity_for_session(
-    db: Session,
-    session: ActivitySession,
-    mood: str,
-    skipped: bool = False,
-) -> tuple[dict, bool]:
-    previous_mood = session.selected_mood
-    history = list(session.previously_drawn_activity_ids or [])
-    if session.current_activity_id and session.current_activity_id not in history:
-        history.append(session.current_activity_id)
-
-    selected, reset = choose_activity(mood, set(history))
-    if reset:
-        last_id = session.current_activity_id if previous_mood == mood else None
-        history = []
-        selected, _ = choose_activity(mood, {last_id} if last_id else set())
-
-    if previous_mood != mood:
-        add_event(
-            db,
-            "activity_mood_selected",
-            session_id=session.anonymous_session_id,
-            metadata={"mood": mood},
-        )
-    if skipped and session.current_activity_id:
-        add_event(
-            db,
-            "activity_skipped",
-            session_id=session.anonymous_session_id,
-            metadata={"mood": previous_mood, "activity_id": session.current_activity_id},
-        )
-
-    session.selected_mood = mood
-    session.current_activity_id = selected["id"]
-    session.previously_drawn_activity_ids = history
-    session.status = "drawn"
-    session.started_at = None
-    session.completed_at = None
-    session.result = None
-    session.party_size = None
-    add_event(
-        db,
-        "activity_drawn",
-        session_id=session.anonymous_session_id,
-        metadata={"mood": mood, "activity_id": selected["id"]},
-    )
-    db.commit()
-    db.refresh(session)
-    return selected, reset
-
-
 def serialize_room(room: Room, participant: Participant) -> dict:
     selected = db_place = next(
         (item for item in room.candidates if item.id == room.selected_place_id), None
@@ -324,112 +233,6 @@ def categories():
     return {"categories": CATEGORIES}
 
 
-@app.get("/api/activities")
-def activities():
-    return {"moods": MOODS, "activities": ACTIVITIES}
-
-
-@app.post("/api/activity-sessions", status_code=201)
-def create_activity_session(payload: ActivitySessionCreate, db: Session = Depends(get_db)):
-    session = ActivitySession(anonymous_session_id=payload.anonymous_session_id)
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    return activity_session_payload(session)
-
-
-@app.get("/api/activity-sessions/{session_id}")
-def get_activity_session(session_id: str, db: Session = Depends(get_db)):
-    return activity_session_payload(activity_session_by_id(db, session_id))
-
-
-@app.post("/api/activity-sessions/{session_id}/draw")
-def draw_activity(
-    session_id: str,
-    payload: ActivityDraw,
-    db: Session = Depends(get_db),
-):
-    session = activity_session_by_id(db, session_id)
-    _, reset = draw_activity_for_session(db, session, payload.mood)
-    response = activity_session_payload(session)
-    response["list_reset"] = reset
-    return response
-
-
-@app.post("/api/activity-sessions/{session_id}/skip")
-def skip_activity(session_id: str, db: Session = Depends(get_db)):
-    session = activity_session_by_id(db, session_id)
-    if not session.selected_mood or not session.current_activity_id:
-        raise HTTPException(409, "먼저 느낌을 선택해 활동을 뽑아 주세요.")
-    _, reset = draw_activity_for_session(db, session, session.selected_mood, skipped=True)
-    response = activity_session_payload(session)
-    response["list_reset"] = reset
-    return response
-
-
-@app.post("/api/activity-sessions/{session_id}/start")
-def start_activity(session_id: str, db: Session = Depends(get_db)):
-    session = activity_session_by_id(db, session_id)
-    if not session.current_activity_id:
-        raise HTTPException(409, "먼저 활동을 뽑아 주세요.")
-    if session.status == "started" and session.started_at:
-        return activity_session_payload(session)
-    if session.status not in {"drawn", "started"}:
-        raise HTTPException(409, "지금은 이 활동을 시작할 수 없어요.")
-    session.status = "started"
-    session.started_at = datetime.now(timezone.utc)
-    add_event(
-        db,
-        "activity_started",
-        session_id=session.anonymous_session_id,
-        metadata={
-            "mood": session.selected_mood,
-            "activity_id": session.current_activity_id,
-        },
-    )
-    db.commit()
-    db.refresh(session)
-    return activity_session_payload(session)
-
-
-@app.post("/api/activity-sessions/{session_id}/complete")
-def complete_activity(
-    session_id: str,
-    payload: ActivityComplete,
-    db: Session = Depends(get_db),
-):
-    session = activity_session_by_id(db, session_id)
-    if not session.current_activity_id:
-        raise HTTPException(409, "완료할 활동이 없어요.")
-    if session.status in {"completed", "abandoned"} and session.result == payload.result:
-        return activity_session_payload(session)
-    if session.status != "started":
-        raise HTTPException(409, "활동을 시작한 뒤 결과를 남겨 주세요.")
-
-    history = list(session.previously_drawn_activity_ids or [])
-    if session.current_activity_id not in history:
-        history.append(session.current_activity_id)
-    session.previously_drawn_activity_ids = history
-    session.status = "abandoned" if payload.result == "abandoned" else "completed"
-    session.completed_at = datetime.now(timezone.utc)
-    session.result = payload.result
-    session.party_size = payload.party_size
-    event_name = "activity_abandoned" if payload.result == "abandoned" else "activity_completed"
-    add_event(
-        db,
-        event_name,
-        session_id=session.anonymous_session_id,
-        metadata={
-            "mood": session.selected_mood,
-            "activity_id": session.current_activity_id,
-            "result": payload.result,
-        },
-    )
-    db.commit()
-    db.refresh(session)
-    return activity_session_payload(session)
-
-
 @app.post("/api/rooms", status_code=201)
 def create_room(payload: RoomCreate, db: Session = Depends(get_db)):
     code = invite_code()
@@ -446,9 +249,10 @@ def create_room(payload: RoomCreate, db: Session = Depends(get_db)):
         hide_until_arrival=payload.hide_until_arrival,
         join_closed=payload.join_closed,
     )
+    raw_token = participant_token()
     host = Participant(
         nickname=clean_text(payload.host_nickname),
-        participant_token=participant_token(),
+        token_hash=hash_token(raw_token),
         is_host=True,
     )
     room.participants.append(host)
@@ -458,7 +262,7 @@ def create_room(payload: RoomCreate, db: Session = Depends(get_db)):
     db.commit()
     return {
         "invite_code": code,
-        "participant_token": host.participant_token,
+        "participant_token": raw_token,
         "participant_id": host.id,
         "invite_url": f"{settings.frontend_url}/join/{code}",
     }
@@ -469,17 +273,18 @@ def join_room(code: str, payload: JoinRequest, db: Session = Depends(get_db)):
     room = room_by_code(db, code)
     if room.join_closed or room.status != "waiting":
         raise HTTPException(409, "이 방은 더 이상 참가할 수 없습니다.")
+    raw_token = participant_token()
     participant = Participant(
         room_id=room.id,
         nickname=clean_text(payload.nickname),
-        participant_token=participant_token(),
+        token_hash=hash_token(raw_token),
     )
     db.add(participant)
     add_event(db, "participant_joined", room.id)
     db.commit()
     return {
         "invite_code": room.invite_code,
-        "participant_token": participant.participant_token,
+        "participant_token": raw_token,
         "participant_id": participant.id,
     }
 
@@ -683,25 +488,23 @@ async def set_conditions(
             for term in payload.excluded_activities
         ):
             continue
-        if payload.indoor_outdoor == "outdoor" and not (
-            place.is_public_outdoor or "관광" in place.category or "산책" in place.category
-        ):
+        if payload.indoor_outdoor == "outdoor" and not is_outdoor_place(place):
             continue
-        if payload.indoor_outdoor == "indoor" and place.is_public_outdoor:
+        if payload.indoor_outdoor == "indoor" and is_outdoor_place(place):
             continue
-        if payload.includes_food is False and (
-            "맛집" in place.category or "디저트" in place.category
-        ):
+        if payload.includes_food is False and is_food_place(place):
             continue
         if (
             payload.total_available_minutes is not None
             and eta * 2 + settings.min_stay_minutes > payload.total_available_minutes
         ):
             continue
-        if payload.budget_per_person is not None and place.price_level is not None:
-            rough_price = [0, 12000, 25000, 50000, 90000][min(place.price_level, 4)]
-            if rough_price > payload.budget_per_person * 1.5:
-                continue
+        if payload.budget_per_person is not None:
+            estimated_price_level = estimate_price_level(place)
+            if estimated_price_level is not None:
+                rough_price = [0, 12000, 25000, 50000, 90000][min(estimated_price_level, 4)]
+                if rough_price > payload.budget_per_person * 1.5:
+                    continue
         if not opening_is_viable(place, eta):
             continue
         db.add(candidate_from_place(room.id, place))
@@ -783,7 +586,7 @@ async def navigation(
     route = cached_route[0] if cached_route else []
     consumed_index = cached_route[1] if cached_route else 0
     if not route or route[-1] != destination:
-        route = await navigation_route(origin, destination)
+        route = await navigation_route(origin, destination, mode)
         consumed_index = 0
     else:
         remaining_route = route[consumed_index:]
@@ -794,7 +597,7 @@ async def navigation(
         )
         nearest = route[next_index]
         if distance_meters(payload.latitude, payload.longitude, nearest[0], nearest[1]) > 80:
-            route = await navigation_route(origin, destination)
+            route = await navigation_route(origin, destination, mode)
             consumed_index = 0
         else:
             consumed_index = max(consumed_index, next_index)
@@ -843,10 +646,7 @@ def reveal(
     if room.status not in {"drawn", "navigating"} or not room.selected_place_id:
         raise HTTPException(409, "공개할 수 없는 상태입니다.")
     place = db.get(PlaceCandidate, room.selected_place_id)
-    if payload.admin_key is not None:
-        if not secrets.compare_digest(payload.admin_key, settings.navigation_admin_key):
-            raise HTTPException(403, "관리자 키가 올바르지 않습니다.")
-    elif payload.manual_confirm:
+    if payload.manual_confirm:
         require_host(participant)
     elif room.hide_until_arrival:
         if payload.latitude is None or payload.longitude is None:
@@ -918,7 +718,6 @@ def stats_period(db: Session, range_name: str) -> dict:
 
     buckets = []
     visitor_sets: list[set[str]] = []
-    activity_visitor_sets: list[set[str]] = []
     for index in range(bucket_count):
         bucket_start = first_bucket + timedelta(hours=bucket_hours * index)
         bucket_end = bucket_start + timedelta(hours=bucket_hours)
@@ -933,8 +732,6 @@ def stats_period(db: Session, range_name: str) -> dict:
                 ),
                 "visitors": 0,
                 "pageviews": 0,
-                "activity_visitors": 0,
-                "activity_pageviews": 0,
                 "rooms_created": 0,
                 "rooms_with_2_plus": 0,
                 "draw_completed": 0,
@@ -943,7 +740,6 @@ def stats_period(db: Session, range_name: str) -> dict:
             }
         )
         visitor_sets.append(set())
-        activity_visitor_sets.append(set())
 
     def bucket_index(value: datetime) -> int | None:
         local_value = aware_utc(value).astimezone(KST)
@@ -958,7 +754,6 @@ def stats_period(db: Session, range_name: str) -> dict:
         )
     ).all()
     period_visitors: set[str] = set()
-    period_activity_visitors: set[str] = set()
     period_shares = 0
     for event in events:
         index = bucket_index(event.created_at)
@@ -968,13 +763,6 @@ def stats_period(db: Session, range_name: str) -> dict:
             buckets[index]["pageviews"] += 1
             visitor_sets[index].add(event.anonymous_session_id)
             period_visitors.add(event.anonymous_session_id)
-        elif (
-            event.event_name in ACTIVITY_VIEW_EVENTS
-            and event.anonymous_session_id != "server-generated"
-        ):
-            buckets[index]["activity_pageviews"] += 1
-            activity_visitor_sets[index].add(event.anonymous_session_id)
-            period_activity_visitors.add(event.anonymous_session_id)
         elif event.event_name == "result_shared":
             buckets[index]["shares"] += 1
             period_shares += 1
@@ -1025,7 +813,6 @@ def stats_period(db: Session, range_name: str) -> dict:
 
     for index, visitors in enumerate(visitor_sets):
         buckets[index]["visitors"] = len(visitors)
-        buckets[index]["activity_visitors"] = len(activity_visitor_sets[index])
 
     rooms_created = len(rooms)
     draw_completed = len(selections)
@@ -1040,8 +827,6 @@ def stats_period(db: Session, range_name: str) -> dict:
         "totals": {
             "visitors": len(period_visitors),
             "pageviews": sum(bucket["pageviews"] for bucket in buckets),
-            "activity_visitors": len(period_activity_visitors),
-            "activity_pageviews": sum(bucket["activity_pageviews"] for bucket in buckets),
             "rooms_created": rooms_created,
             "rooms_with_2_plus": period_multi_rooms,
             "draw_completed": draw_completed,
@@ -1083,23 +868,6 @@ def admin_stats(
         )
         or 0
     )
-    activity_visitors = (
-        db.scalar(
-            select(func.count(func.distinct(AnalyticsEvent.anonymous_session_id))).where(
-                AnalyticsEvent.event_name.in_(ACTIVITY_VIEW_EVENTS),
-                AnalyticsEvent.anonymous_session_id != "server-generated",
-            )
-        )
-        or 0
-    )
-    activity_pageviews = (
-        db.scalar(
-            select(func.count(AnalyticsEvent.id)).where(
-                AnalyticsEvent.event_name.in_(ACTIVITY_VIEW_EVENTS)
-            )
-        )
-        or 0
-    )
     rooms = db.scalar(select(func.count(Room.id))) or 0
     multi_rooms = (
         db.scalar(
@@ -1125,8 +893,6 @@ def admin_stats(
     return {
         "visitors": visitors,
         "pageviews": pageviews,
-        "activity_visitors": activity_visitors,
-        "activity_pageviews": activity_pageviews,
         "rooms_created": rooms,
         "rooms_with_2_plus": multi_rooms,
         "draw_completed": drawn,
