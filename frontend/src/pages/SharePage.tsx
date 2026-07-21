@@ -22,18 +22,18 @@ export default function SharePage() {
   }, [code])
   if (error)
     return (
-      <Shell>
+      <Shell title="미스터리 봉인 해제">
         <EmptyState title="공유 결과를 찾지 못했어요" body={error} />
       </Shell>
     )
   if (!data)
     return (
-      <Shell>
+      <Shell title="미스터리 봉인 해제">
         <Skeleton />
       </Shell>
     )
   return (
-    <Shell>
+    <Shell title="미스터리 봉인 해제">
       <section className="share-page">
         <Logo />
         <span className="eyebrow">

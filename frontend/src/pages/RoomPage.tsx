@@ -147,6 +147,7 @@ export default function RoomPage() {
   const goToStepOne = () => navigate(`/create?mode=${room.mode}`)
   return (
     <Shell
+      title={room.status === 'waiting' ? '대기실' : room.status === 'drawn' ? '오늘의 가이드' : '이동 중…'}
       home={room.status === 'waiting'}
       onHome={goHome}
       back={room.status === 'waiting'}

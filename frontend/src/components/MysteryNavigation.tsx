@@ -373,7 +373,7 @@ export function MysteryNavigation({
         path: [],
         map,
         strokeWeight: 6,
-        strokeColor: '#6758e5',
+        strokeColor: '#00b896',
         strokeOpacity: 1,
         strokeStyle: 'solid',
         zIndex: 3,

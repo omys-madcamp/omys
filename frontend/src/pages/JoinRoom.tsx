@@ -32,7 +32,7 @@ export default function JoinRoom() {
     }
   }
   return (
-    <Shell>
+    <Shell title="OMYS">
       <section className="join-hero">
         <span className="invite-envelope">
           <DoorOpen />

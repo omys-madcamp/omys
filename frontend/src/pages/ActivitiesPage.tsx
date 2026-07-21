@@ -179,7 +179,7 @@ export default function ActivitiesPage() {
 
   if (loading)
     return (
-      <Shell back>
+      <Shell back title="미스터리 활동">
         <Skeleton />
       </Shell>
     )
@@ -188,7 +188,7 @@ export default function ActivitiesPage() {
   const mood = session?.selected_mood ? MOODS[session.selected_mood] : null
 
   return (
-    <Shell back>
+    <Shell back title="미스터리 활동">
       <div className="activity-page">
         {error && <Notice tone="warning">{error}</Notice>}
 

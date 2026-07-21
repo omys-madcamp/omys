@@ -9,9 +9,10 @@ import { Button, Field, Notice, Shell } from '../components/UI'
 export default function CreateRoom() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const mode = params.get('mode') === 'omys' ? 'omys' : 'friends'
+  const initialMode = params.get('mode') === 'omys' ? 'omys' : 'friends'
+  const [mode, setMode] = useState<'friends' | 'omys'>(initialMode)
   const [form, setForm] = useState({
-    title: mode === 'friends' ? '우리의 미스터리 외출' : '오늘의 즉흥 외출',
+    title: mode === 'friends' ? '우리의 비밀 외출' : '오늘의 즉흥 외출',
     nickname: '',
     location: '서울시청',
     lat: 37.5665,
@@ -25,6 +26,16 @@ export default function CreateRoom() {
   const [findingLocation, setFindingLocation] = useState(false)
   const [locationPreview, setLocationPreview] = useState<KakaoLocation | null>(null)
   const [locationConfirmed, setLocationConfirmed] = useState(false)
+
+  const changeMode = (nextMode: 'friends' | 'omys') => {
+    if (nextMode === mode) return
+    setMode(nextMode)
+    setForm((prev) => ({
+      ...prev,
+      title: nextMode === 'friends' ? '우리의 비밀 외출' : '오늘의 즉흥 외출',
+      hideUntilArrival: nextMode === 'omys',
+    }))
+  }
 
   const goHome = () => {
     resetLocalSession()
@@ -150,13 +161,21 @@ export default function CreateRoom() {
     }
   }
   return (
-    <Shell back backLabel="홈으로 돌아가기" onBack={goHome}>
+    <Shell back backLabel="홈으로 돌아가기" onBack={goHome} title="방 만들기">
       <div className="step-label">STEP 1 · 방 만들기</div>
       <h1 className="page-title">
         {mode === 'friends' ? '친구들과 어디로 가볼까요?' : '조건만 알려주면 나머지는 비밀!'}
       </h1>
       <p className="page-subtitle">출발 위치는 가까운 장소와 이동 시간을 찾는 데만 사용해요.</p>
-      <form className="stack" onSubmit={submit}>
+      <form className="stack create-room-form" onSubmit={submit}>
+        <div className="mode-switch" role="tablist" aria-label="방 생성 방식">
+          <button type="button" role="tab" aria-selected={mode === 'friends'} className={mode === 'friends' ? 'active' : ''} onClick={() => changeMode('friends')}>
+            친구들과 시작하기
+          </button>
+          <button type="button" role="tab" aria-selected={mode === 'omys'} className={mode === 'omys' ? 'active' : ''} onClick={() => changeMode('omys')}>
+            OMYS가 골라주기
+          </button>
+        </div>
         <Field label="방 이름">
           <input
             value={form.title}

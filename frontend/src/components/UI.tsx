@@ -22,6 +22,7 @@ export function Shell({
   home,
   onHome,
   wide = false,
+  title,
 }: PropsWithChildren<{
   back?: boolean
   backLabel?: string
@@ -29,11 +30,12 @@ export function Shell({
   home?: boolean
   onHome?: () => void
   wide?: boolean
+  title?: string
 }>) {
   const navigate = useNavigate()
   const hasNavigation = back || home
   return (
-    <div className="app-shell">
+    <div className={wide ? 'app-shell app-shell--wide' : 'app-shell app-shell--mobile'}>
       <header className="topbar">
         {hasNavigation ? (
           <div className="topbar__actions">
@@ -63,7 +65,7 @@ export function Shell({
         ) : (
           <Logo compact />
         )}
-        <span className="topbar__tag">오늘은 어디로?</span>
+        <span className="topbar__tag">{title ?? '오늘은 어디로?'}</span>
       </header>
       <main className={wide ? 'page page--wide' : 'page'}>{children}</main>
     </div>
@@ -102,6 +104,39 @@ export function Field({
       {children}
       {hint ? <small>{hint}</small> : null}
     </label>
+  )
+}
+
+export type SegmentedOption<T extends string> = {
+  value: T
+  label: string
+}
+
+export function SegmentedTabs<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: readonly SegmentedOption<T>[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="segmented-tabs" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={value === option.value ? 'segmented-tabs__item active' : 'segmented-tabs__item'}
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
