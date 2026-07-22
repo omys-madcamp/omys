@@ -64,7 +64,6 @@ export function Shell({
               )}
             </div>
           )}
-          <Logo compact />
         </div>
         <span className="topbar__tag">{title ?? '오늘은 어디로?'}</span>
       </header>

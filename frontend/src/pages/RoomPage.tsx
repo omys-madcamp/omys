@@ -20,6 +20,7 @@ import { PlaceSearch } from '../components/PlaceSearch'
 import { Conditions } from '../components/Conditions'
 import { MysteryNavigation } from '../components/MysteryNavigation'
 import { ResultCard } from '../components/ResultCard'
+import { PlaceMapPreview } from '../components/PlaceMapPreview'
 import { shareToKakaoTalk } from '../lib/kakao'
 
 export default function RoomPage() {
@@ -301,17 +302,24 @@ export default function RoomPage() {
           <h1>{room.you_are_guide ? '당신이 오늘의 가이드!' : '목적지는 아직 비밀입니다'}</h1>
           {room.you_are_guide && room.selected_place ? (
             <div className="guide-card">
-              <span>
-                <Eye />
-              </span>
-              <small>나에게만 보이는 당첨 장소</small>
-              <h2>{room.selected_place.name}</h2>
-              <p>{room.selected_place.address}</p>
-              {room.selected_place.place_url && (
-                <a href={room.selected_place.place_url} target="_blank" rel="noreferrer">
-                  길찾기 열기 <Navigation size={16} />
-                </a>
-              )}
+              <PlaceMapPreview
+                latitude={room.selected_place.latitude}
+                longitude={room.selected_place.longitude}
+                name={room.selected_place.name}
+              />
+              <div className="guide-card__body">
+                <span>
+                  <Eye />
+                </span>
+                <small>나에게만 보이는 당첨 장소</small>
+                <h2>{room.selected_place.name}</h2>
+                <p>{room.selected_place.address}</p>
+                {room.selected_place.place_url && (
+                  <a href={room.selected_place.place_url} target="_blank" rel="noreferrer">
+                    길찾기 열기 <Navigation size={16} />
+                  </a>
+                )}
+              </div>
             </div>
           ) : (
             <p>

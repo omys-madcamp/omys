@@ -299,6 +299,9 @@ export function PlaceSearch({
           <span>{departureLocation}에서 가까운 순</span>
         </div>
       )}
+      {!loading && searchedActivity && results.length === 0 && !error && (
+        <Notice tone="warning">주변에서 장소를 찾지 못했어요. 다른 종목으로 다시 찾아보세요.</Notice>
+      )}
       <div className="place-list">
         {loading
           ? [1, 2, 3].map((item) => <div className="place-card place-card--loading" key={item} />)

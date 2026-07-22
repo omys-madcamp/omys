@@ -528,6 +528,14 @@ def join_room(code: str, payload: JoinRequest, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/rooms/{code}/status")
+def get_room_status(code: str, db: Session = Depends(get_db)):
+    """Public, auth-free existence check so the join page can tell a bad invite code
+    apart from a valid one before asking for a nickname."""
+    room = room_by_code(db, code)
+    return {"joinable": not room.join_closed and room.status == "waiting"}
+
+
 @app.get("/api/rooms/{code}")
 def get_room(code: str, token: str | None = Depends(token_header), db: Session = Depends(get_db)):
     room = room_by_code(db, code)
@@ -714,7 +722,15 @@ async def set_conditions(
         room.condition = condition
     db.flush()
     categories_to_search = payload.preferred_categories or CATEGORIES
-    search_radius = travel_distance_meters(payload.max_travel_minutes, payload.transport_mode)
+    # Kakao returns only the nearest ~15 results per query (page_count=1, to avoid a
+    # slow later page killing an otherwise-usable first page). In a dense area that
+    # means every candidate clusters right next to the departure point even when the
+    # user allows a much longer trip. Search a wider radius than the strict travel-time
+    # conversion so farther-but-still-eligible spots are in the pool too — the eta
+    # check below still enforces the real `max_travel_minutes` limit per candidate.
+    search_radius = round(
+        travel_distance_meters(payload.max_travel_minutes, payload.transport_mode) * 1.6
+    )
     found, failed_searches, search_count = await discover_places(
         places_provider,
         categories_to_search,
