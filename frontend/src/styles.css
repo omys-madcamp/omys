@@ -861,6 +861,11 @@ select:focus {
 .invite-card div {
   overflow: hidden;
 }
+.invite-card__actions {
+  display: flex;
+  gap: 8px;
+  overflow: visible;
+}
 .invite-card small {
   display: block;
   color: #dcd8ff;
@@ -1143,6 +1148,12 @@ select:focus {
   color: #00b896;
   background: #cff4ea;
   border-radius: 13px;
+}
+a.place-card__icon {
+  cursor: pointer;
+}
+a.place-card__icon:hover {
+  background: #b8ecdd;
 }
 .place-card__body {
   min-width: 0;

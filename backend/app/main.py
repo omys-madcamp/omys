@@ -83,6 +83,7 @@ EVENTS = {
     "invite_link_copied",
     "participant_joined",
     "place_submitted",
+    "place_candidate_removed",
     "draw_started",
     "spot_selected",
     "navigation_started",
@@ -612,6 +613,34 @@ async def submit_candidate(
         db.rollback()
         raise HTTPException(409, "이미 제출한 장소입니다.")
     return {"candidate": place_payload(candidate)}
+
+
+@app.delete("/api/rooms/{code}/candidates/{external_place_id}", status_code=200)
+def cancel_candidate(
+    code: str,
+    external_place_id: str,
+    token: str | None = Depends(token_header),
+    db: Session = Depends(get_db),
+):
+    room = room_by_code(db, code)
+    participant = get_participant(db, room, token)
+    if room.mode != "friends" or room.status != "waiting":
+        raise HTTPException(409, "지금은 장소를 취소할 수 없습니다.")
+    candidate = db.scalar(
+        select(PlaceCandidate).where(
+            PlaceCandidate.room_id == room.id,
+            PlaceCandidate.participant_id == participant.id,
+            PlaceCandidate.external_place_id == external_place_id,
+        )
+    )
+    if not candidate:
+        raise HTTPException(404, "제출한 장소를 찾을 수 없습니다.")
+    db.delete(candidate)
+    if participant.submission_completed:
+        participant.submission_completed = False
+    add_event(db, "place_candidate_removed", room.id)
+    db.commit()
+    return {"removed": True}
 
 
 @app.post("/api/rooms/{code}/submission/complete")
