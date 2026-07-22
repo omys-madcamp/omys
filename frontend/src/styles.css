@@ -3018,7 +3018,13 @@ body {
 .usage-modal {
   max-height: min(82dvh, 720px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: left;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.usage-modal::-webkit-scrollbar {
+  display: none;
 }
 .usage-modal > .room-code-modal__icon {
   margin-right: auto;
