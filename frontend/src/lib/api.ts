@@ -78,6 +78,7 @@ export type AdminStats = AdminMetricSummary & {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const STORAGE_PREFIX = 'omys:'
+export const ACTIVITY_SESSION_STORAGE_KEY = 'omys:activity-session'
 
 export class ApiError extends Error {
   constructor(
@@ -103,6 +104,10 @@ export function resetLocalSession() {
     const key = localStorage.key(index)
     if (key?.startsWith(STORAGE_PREFIX)) localStorage.removeItem(key)
   }
+}
+
+export function resetActivitySession() {
+  localStorage.removeItem(ACTIVITY_SESSION_STORAGE_KEY)
 }
 
 export async function api<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {

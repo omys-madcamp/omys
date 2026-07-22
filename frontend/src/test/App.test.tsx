@@ -4,7 +4,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.clear()
+})
 
 vi.stubGlobal(
   'fetch',
@@ -26,6 +29,27 @@ describe('OMYS mobile flow', () => {
     expect(screen.queryByText('친구들의 비밀 후보')).not.toBeInTheDocument()
     expect(screen.queryByText('새로고침해도 잠금')).not.toBeInTheDocument()
     expect(screen.queryByText('도착 순간 공개')).not.toBeInTheDocument()
+  })
+
+  it('starts a fresh activity session when re-entering from home', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(
+      'omys:activity-session',
+      JSON.stringify({ id: 'previous-session', token: 'previous-token' }),
+    )
+    localStorage.setItem('omys:participant:ABC123', 'room-token')
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /활동 뽑기/ }))
+
+    expect(localStorage.getItem('omys:activity-session')).toBeNull()
+    expect(localStorage.getItem('omys:participant:ABC123')).toBe('room-token')
+    expect(await screen.findByText('지금 어떤 느낌이 필요한가요?')).toBeInTheDocument()
   })
 
   it('opens the room-code modal and accepts a six-character alphanumeric code', async () => {

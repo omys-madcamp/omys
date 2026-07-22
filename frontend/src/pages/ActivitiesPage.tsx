@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, Clock3, Copy, RotateCcw, Share2, Sparkles, Zap } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, ApiError, getAnonymousSessionId, track } from '../lib/api'
+import {
+  ACTIVITY_SESSION_STORAGE_KEY,
+  api,
+  ApiError,
+  getAnonymousSessionId,
+  track,
+} from '../lib/api'
 import { Button, Notice, Shell, Skeleton } from '../components/UI'
 
 type Mood = 'light' | 'funny' | 'dopamine'
@@ -38,15 +44,13 @@ const MOODS: Record<Mood, { emoji: string; label: string; description: string }>
   dopamine: { emoji: '⚡', label: '도파민', description: '랜덤, 경쟁, 제한 시간' },
 }
 
-const STORAGE_KEY = 'omys:activity-session'
-
 type ActivityCredentials = {
   id: string
   token: string
 }
 
 function loadCredentials(): ActivityCredentials | null {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = localStorage.getItem(ACTIVITY_SESSION_STORAGE_KEY)
   if (!stored) return null
   try {
     const parsed = JSON.parse(stored) as Partial<ActivityCredentials>
@@ -56,7 +60,7 @@ function loadCredentials(): ActivityCredentials | null {
   } catch {
     // The previous version stored only a session id, which cannot pass token validation.
   }
-  localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(ACTIVITY_SESSION_STORAGE_KEY)
   return null
 }
 
@@ -96,7 +100,7 @@ export default function ActivitiesPage() {
     (value: ActivitySession, token: string) => {
       setSession({ ...value, session_token: null })
       setSessionToken(token)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: value.id, token }))
+      localStorage.setItem(ACTIVITY_SESSION_STORAGE_KEY, JSON.stringify({ id: value.id, token }))
       const currentId = searchParams.get('session')
       if (currentId !== value.id) navigate(`/activities?session=${value.id}`, { replace: true })
     },
@@ -122,7 +126,7 @@ export default function ActivitiesPage() {
             setLoading(false)
             return
           }
-          localStorage.removeItem(STORAGE_KEY)
+          localStorage.removeItem(ACTIVITY_SESSION_STORAGE_KEY)
         }
       }
       try {
