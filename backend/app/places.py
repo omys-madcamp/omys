@@ -43,6 +43,8 @@ CATEGORY_DISCOVERY_QUERIES = {
 CATEGORY_MATCH_TERMS = {
     "게임·실내 놀거리": (
         "게임",
+        "보드카페",
+        "보드게임",
         "방탈출",
         "피시방",
         "pc방",

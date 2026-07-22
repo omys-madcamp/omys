@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { DoorOpen, LockKeyhole, Sparkles } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, getToken, saveToken, track } from '../lib/api'
-import { Button, Field, Notice, Shell } from '../components/UI'
+import { Button, EmptyState, Field, Notice, Shell, Skeleton } from '../components/UI'
 
 export default function JoinRoom() {
   const { code = '' } = useParams()
@@ -10,8 +10,27 @@ export default function JoinRoom() {
   const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [checking, setChecking] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   useEffect(() => {
-    if (getToken(code)) navigate(`/room/${code}`, { replace: true })
+    if (getToken(code)) {
+      navigate(`/room/${code}`, { replace: true })
+      return
+    }
+    let active = true
+    api<{ joinable: boolean }>(`/api/rooms/${code}/status`)
+      .then(() => {
+        if (active) setChecking(false)
+      })
+      .catch(() => {
+        if (active) {
+          setNotFound(true)
+          setChecking(false)
+        }
+      })
+    return () => {
+      active = false
+    }
   }, [code, navigate])
   const join = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -31,8 +50,24 @@ export default function JoinRoom() {
       setLoading(false)
     }
   }
+  if (checking)
+    return (
+      <Shell title="초대장 확인">
+        <Skeleton />
+      </Shell>
+    )
+  if (notFound)
+    return (
+      <Shell title="초대장 확인">
+        <EmptyState
+          title="방을 찾을 수 없어요"
+          body="초대 코드가 정확한지, 방이 아직 열려 있는지 확인해 주세요."
+          action={<Button onClick={() => navigate('/')}>홈으로 가기</Button>}
+        />
+      </Shell>
+    )
   return (
-    <Shell title="OMYS">
+    <Shell title="초대장 확인">
       <section className="join-hero">
         <span className="invite-envelope">
           <DoorOpen />
