@@ -41,6 +41,7 @@ services:
       args:
         VITE_API_BASE_URL: ""
         VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY:-}
+        VITE_KAKAO_SHARE_JAVASCRIPT_KEY: ${VITE_KAKAO_SHARE_JAVASCRIPT_KEY:-}
     ports:
       - "8080:80"
     depends_on:
