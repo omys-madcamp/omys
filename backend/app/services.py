@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -11,7 +13,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .geo import distance_meters, travel_minutes
 from .models import PlaceCandidate, Room, Selection
-from .places import PlacesProvider
+from .places import CATEGORY_DISCOVERY_QUERIES, PlacesProvider
 from .schemas import PlaceResult
 
 
@@ -19,6 +21,60 @@ NO_CANDIDATE_MESSAGE = (
     "조건에 맞는 비밀 스팟을 찾지 못했습니다. 최대 이동 시간을 늘리거나 "
     "카테고리·공간 선호 같은 조건을 조금 완화해 주세요."
 )
+
+logger = logging.getLogger(__name__)
+DISCOVERY_SEARCH_TIMEOUT_SECONDS = 8.0
+
+
+async def discover_places(
+    provider: PlacesProvider,
+    categories: list[str],
+    latitude: float,
+    longitude: float,
+    radius: int,
+    *,
+    timeout_seconds: float = DISCOVERY_SEARCH_TIMEOUT_SECONDS,
+) -> tuple[dict[str, PlaceResult], int, int]:
+    """Fetch the nearest discovery results without waiting for unnecessary later pages."""
+
+    searches = [
+        (category, query)
+        for category in list(dict.fromkeys(categories))[:5]
+        for query in CATEGORY_DISCOVERY_QUERIES.get(category, [category])
+    ]
+
+    async def search_one(category: str, query: str) -> list[PlaceResult]:
+        # The first Kakao page already contains the 15 nearest results. Fetching three
+        # sequential pages made a usable first page disappear when a later page timed out.
+        return await asyncio.wait_for(
+            provider.search(
+                query,
+                latitude,
+                longitude,
+                category,
+                radius=radius,
+                page_count=1,
+            ),
+            timeout=timeout_seconds,
+        )
+
+    results = await asyncio.gather(
+        *(search_one(category, query) for category, query in searches),
+        return_exceptions=True,
+    )
+    found: dict[str, PlaceResult] = {}
+    failed_searches = 0
+    for result in results:
+        if isinstance(result, BaseException):
+            failed_searches += 1
+            logger.warning(
+                "Discovery place search failed (error=%s)",
+                type(result).__name__,
+            )
+            continue
+        for place in result:
+            found[place.external_place_id] = place
+    return found, failed_searches, len(searches)
 
 
 def opening_is_viable(place: PlaceResult, eta_minutes: int) -> bool:

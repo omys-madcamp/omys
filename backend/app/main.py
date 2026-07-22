@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import secrets
 import time
 from collections import defaultdict, deque
@@ -36,7 +35,6 @@ from .models import (
 )
 from .places import (
     CATEGORIES,
-    CATEGORY_DISCOVERY_QUERIES,
     estimate_price_level,
     is_food_place,
     is_outdoor_place,
@@ -69,6 +67,7 @@ from .security import (
 from .services import (
     NO_CANDIDATE_MESSAGE,
     candidate_from_place,
+    discover_places,
     lock_selection,
     opening_is_viable,
     place_payload,
@@ -716,36 +715,17 @@ async def set_conditions(
     db.flush()
     categories_to_search = payload.preferred_categories or CATEGORIES
     search_radius = travel_distance_meters(payload.max_travel_minutes, payload.transport_mode)
-    search_tasks = [
-        asyncio.create_task(
-            places_provider.search(
-                query,
-                room.departure_latitude,
-                room.departure_longitude,
-                category,
-                radius=search_radius,
-                page_count=3,
-            )
-        )
-        for category in categories_to_search[:5]
-        for query in CATEGORY_DISCOVERY_QUERIES.get(category, [category])
-    ]
-    done, pending = await asyncio.wait(search_tasks, timeout=10)
-    for task in pending:
-        task.cancel()
-
-    found = {}
-    failed_searches = len(pending)
-    for task in done:
-        try:
-            for place in task.result():
-                found[place.external_place_id] = place
-        except (httpx.HTTPError, TimeoutError, ValueError, KeyError):
-            failed_searches += 1
-    if search_tasks and failed_searches == len(search_tasks):
+    found, failed_searches, search_count = await discover_places(
+        places_provider,
+        categories_to_search,
+        room.departure_latitude,
+        room.departure_longitude,
+        search_radius,
+    )
+    if search_count and failed_searches == search_count:
         raise HTTPException(
             503,
-            "카카오 장소 검색 응답이 늦어지고 있습니다. 잠시 후 다시 시도하거나 "
+            "장소 검색 서비스 응답이 늦어지고 있습니다. 잠시 후 다시 시도하거나 "
             "시간 설정을 조금 더 완화해 주세요.",
         )
 
