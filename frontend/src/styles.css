@@ -17,11 +17,15 @@
 * {
   box-sizing: border-box;
 }
+html {
+  overscroll-behavior-y: none;
+}
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
   background: radial-gradient(circle at 90% 0%, #cff4ea 0, transparent 28rem), #f8f9fd;
+  overscroll-behavior-y: none;
 }
 button,
 input,
@@ -1599,7 +1603,6 @@ a.status:hover {
   padding: 25px 22px 45px;
   background: #fff;
   border-radius: 25px 25px 0 0;
-  box-shadow: 0 -8px 35px #37324e18;
 }
 .nav-card__eyebrow {
   display: flex;
@@ -1779,8 +1782,9 @@ a.status:hover {
   border-radius: 17px;
 }
 .result-card__top small {
-  color: #dedaff;
-  font-size: 10px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
   letter-spacing: 0.12em;
 }
 .result-card__top h1 {
@@ -3235,9 +3239,8 @@ body {
 @media (min-width: 394px) {
   .mobile-home,
   .app-shell--mobile {
-    min-height: 852px;
-    margin-block: 24px;
-    box-shadow: 0 18px 55px rgba(0, 72, 60, 0.16);
+    min-height: 100dvh;
+    margin-block: 0;
   }
 }
 .app-shell--mobile .topbar {

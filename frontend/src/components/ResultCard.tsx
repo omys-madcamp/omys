@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button } from './UI'
 import { PlaceMapPreview } from './PlaceMapPreview'
 import { formatDistance, formatVerified, track, type Room } from '../lib/api'
+import { shareToKakaoTalk } from '../lib/kakao'
 
 export function ResultCard({ room }: { room: Room }) {
   const place = room.selected_place!
@@ -17,9 +18,22 @@ export function ResultCard({ room }: { room: Room }) {
     alert('결과 링크를 복사했어요!')
   }
   const share = async () => {
-    if (navigator.share)
-      await navigator.share({ title: '오늘의 OMYS', text: shareText, url: shareUrl })
-    else await copy()
+    try {
+      await shareToKakaoTalk({ title: '오늘의 OMYS', description: shareText, url: shareUrl })
+      track('result_shared')
+      return
+    } catch {
+      // 카카오 JS 키 미설정 등 — 다음 방법으로 폴백.
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: '오늘의 OMYS', text: shareText, url: shareUrl })
+      } catch {
+        // 사용자가 공유 시트를 취소한 경우 등 — 조용히 무시.
+      }
+    } else {
+      await copy()
+    }
     track('result_shared')
   }
   return (
